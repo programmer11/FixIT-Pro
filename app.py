@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import rag
 
-app = FastAPI(title="FixNest")
+app = FastAPI(title="FixIT-Pro")
 static = rag.folder / "static"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
