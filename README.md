@@ -8,6 +8,8 @@ It's a small retrieval-augmented generation (RAG) app:
 - **Generation:** a local [Qwen 2.5 3B Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) model (GGUF, via `llama-cpp-python`) writes the recommendation, using only the retrieved profiles. No OpenAI key is needed.
 - **Web UI:** a FastAPI server with a landing page, search results as provider cards, and an admin page for uploading profiles.
 
+▶ Watch the 2-minute [demo video](FixIT-Pro-demo.mp4). Full documentation is in [docs/](docs/README.md).
+
 ## Requirements
 
 - Python 3.10+
@@ -89,6 +91,7 @@ You can also upload profiles from the notebook: put the JSON file next to `home_
 | `rag.py` | Pinecone search, profile upload and Qwen answer generation |
 | `static/` | Landing page, admin page, styles and browser script |
 | `home_repair_rag.ipynb` | The original notebook version of the pipeline |
+| `docs/` | Architecture, setup, user and admin guides, data format, API reference, troubleshooting |
 
 ## API
 
