@@ -1,0 +1,6 @@
+.env
+__pycache__/
+.DS_Store
+# Technician profile data is kept out of the repo; upload it via /admin.
+santa_clara_home_repair_profiles.json
+*.bak.json

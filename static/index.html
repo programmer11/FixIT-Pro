@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FixNest — Find home repair pros in Santa Clara</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="logo" href="/"><span class="logo-mark">⌂</span>FixNest</a>
+      <nav class="nav-links">
+        <a href="#categories">Explore</a>
+        <a href="#how">How it works</a>
+        <a class="pill" href="/admin">Admin</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <h1>Find the right pro for any home repair.</h1>
+        <p class="lead">Describe the job and we'll match you with Santa Clara–area technicians, with their licensing, fees and contact details side by side.</p>
+        <form class="searchbar" id="search-form">
+          <label>
+            <span aria-hidden="true">🔍</span>
+            <input id="q" name="q" type="text" placeholder="What's on your to-do list? e.g. leaky kitchen faucet" required minlength="3" maxlength="500" aria-label="Describe the job">
+          </label>
+          <label>
+            <span aria-hidden="true">📍</span>
+            <input id="loc" name="loc" type="text" placeholder="City or ZIP" value="Santa Clara" maxlength="80" aria-label="City or ZIP">
+          </label>
+          <button type="submit" id="go">Search</button>
+        </form>
+        <div class="chips">
+          <button class="chip" data-q="Fix a clogged shower drain">Clogged drain</button>
+          <button class="chip" data-q="Mount a TV on the wall">TV mounting</button>
+          <button class="chip" data-q="Patch a hole in drywall">Drywall patch</button>
+          <button class="chip" data-q="Replace a broken light switch and outlet">Outlet / switch</button>
+          <button class="chip" data-q="Assemble IKEA furniture">Furniture assembly</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="results" hidden>
+      <div class="wrap">
+        <div class="results-head">
+          <h2 id="results-title">Top matches</h2>
+          <span class="muted" id="results-sub"></span>
+        </div>
+        <div class="results-layout">
+          <div class="cards" id="cards"></div>
+          <aside class="summary" aria-live="polite">
+            <h3>✨ AI recommendation</h3>
+            <p class="sub">Generated locally by Qwen from the profiles shown. Always confirm details with the provider.</p>
+            <div class="body" id="summary"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="categories">
+      <div class="wrap">
+        <h2>Popular home repair projects</h2>
+        <div class="grid">
+          <button class="tile" data-q="Plumbing repair: leaky faucet, toilet or drain"><span class="ico">🚰</span><strong>Plumbing</strong></button>
+          <button class="tile" data-q="Electrical work: lights, outlets and switches"><span class="ico">💡</span><strong>Electrical</strong></button>
+          <button class="tile" data-q="Drywall repair and patching"><span class="ico">🧱</span><strong>Drywall</strong></button>
+          <button class="tile" data-q="Interior or exterior painting"><span class="ico">🎨</span><strong>Painting</strong></button>
+          <button class="tile" data-q="Door and window repair or installation"><span class="ico">🚪</span><strong>Doors &amp; windows</strong></button>
+          <button class="tile" data-q="Furniture assembly"><span class="ico">🪑</span><strong>Assembly</strong></button>
+          <button class="tile" data-q="TV and picture mounting"><span class="ico">📺</span><strong>TV mounting</strong></button>
+          <button class="tile" data-q="Fence or gate repair"><span class="ico">🏡</span><strong>Fences &amp; gates</strong></button>
+          <button class="tile" data-q="Appliance repair or installation"><span class="ico">🔧</span><strong>Appliances</strong></button>
+          <button class="tile" data-q="Gutter cleaning and repair"><span class="ico">🌧️</span><strong>Gutters</strong></button>
+          <button class="tile" data-q="Flooring and tile repair"><span class="ico">🪵</span><strong>Flooring &amp; tile</strong></button>
+          <button class="tile" data-q="Roof repair"><span class="ico">🏠</span><strong>Roofing</strong></button>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="band">
+      <div class="wrap">
+        <h2>How FixNest works</h2>
+        <div class="steps">
+          <div class="step"><div class="num">1</div><h3>Tell us what you need</h3><p>Describe the repair in plain words — no forms or categories required.</p></div>
+          <div class="step"><div class="num">2</div><h3>Compare matched pros</h3><p>See services, ratings, fees, license evidence and verification dates at a glance.</p></div>
+          <div class="step"><div class="num">3</div><h3>Contact and confirm</h3><p>Call or email the provider directly, and verify licensing before you hire.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>© FixNest · Santa Clara home repair directory</span>
+      <span>Profile data is compiled from public listings and may be out of date.</span>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

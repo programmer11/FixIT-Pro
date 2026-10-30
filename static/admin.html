@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FixNest Admin</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="logo" href="/"><span class="logo-mark">⌂</span>FixNest</a>
+      <nav class="nav-links">
+        <a class="pill" href="/">Back to site</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="panel" id="login-panel">
+      <h1>Admin sign in</h1>
+      <p>Enter the admin password (<code>ADMIN_PASSWORD</code> in <code>.env</code>).</p>
+      <form id="login-form">
+        <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password" required></label>
+        <button class="btn primary" type="submit">Sign in</button>
+      </form>
+      <div id="login-status"></div>
+    </div>
+
+    <div class="panel" id="upload-panel" hidden>
+      <h1>Admin dashboard</h1>
+      <p id="current" class="meta"></p>
+      <p><a class="btn primary" href="/">Go to site</a>
+        <button class="btn" type="button" id="logout">Sign out</button></p>
+      <details class="optional">
+        <summary>Upload technician profiles <span class="meta">(optional)</span></summary>
+      <p>Only needed when the profiles change. Upload a <code>home_repair_profiles</code> JSON file: an array of profile objects, each with an <strong>ID</strong> and <strong>Name / company</strong>. Profiles with an existing ID are updated; new IDs are added.</p>
+      <form id="upload-form">
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept=".json,application/json" hidden>
+          <div id="drop-text"><strong>Choose a JSON file</strong> or drag it here</div>
+        </label>
+        <p style="margin-top:16px"><button class="btn primary" type="submit" id="upload-btn" disabled>Upload to index</button></p>
+      </form>
+      <div id="upload-status"></div>
+      </details>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const KEY = "fixnest-admin-token";
+    const store = {
+      get: () => { try { return sessionStorage.getItem(KEY) || ""; } catch { return ""; } },
+      set: (v) => { try { v ? sessionStorage.setItem(KEY, v) : sessionStorage.removeItem(KEY); } catch {} },
+    };
+    let token = store.get(), chosen = null;
+
+    function status(id, cls, text) { $(id).innerHTML = `<div class="status ${cls}"></div>`; $(id).firstChild.textContent = text; }
+    async function call(url, opts = {}) {
+      const res = await fetch(url, { method: "POST", ...opts, headers: { "X-Admin-Token": token, ...(opts.headers || {}) } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+      return data;
+    }
+    function showUpload(info) {
+      $("login-panel").hidden = true; $("upload-panel").hidden = false;
+      $("current").textContent = `Signed in. ${info.local_profiles} technician profiles are loaded and searchable — no upload needed unless they change.`;
+    }
+    async function login() {
+      try { showUpload(await call("/api/admin/login")); store.set(token); }
+      catch (e) { store.set(""); token = ""; if ($("pw").value) status("login-status", "err", e.message); }
+    }
+
+    $("login-form").addEventListener("submit", (e) => { e.preventDefault(); token = $("pw").value; login(); });
+    $("logout").addEventListener("click", () => { store.set(""); location.reload(); });
+    if (token) login();
+
+    function choose(file) {
+      chosen = file || null;
+      $("upload-btn").disabled = !chosen;
+      $("drop-text").innerHTML = chosen ? "" : "<strong>Choose a JSON file</strong> or drag it here";
+      if (chosen) $("drop-text").textContent = `${chosen.name} · ${(chosen.size / 1024).toFixed(1)} KB`;
+    }
+    $("file").addEventListener("change", (e) => choose(e.target.files[0]));
+    const drop = $("drop");
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => choose(e.dataTransfer.files[0]));
+
+    $("upload-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!chosen) return;
+      const body = new FormData(); body.append("file", chosen);
+      $("upload-btn").disabled = true;
+      status("upload-status", "info", "Uploading and indexing…");
+      try {
+        const r = await call("/api/admin/upload", { body });
+        status("upload-status", "ok", `Uploaded ${r.uploaded} profiles from ${r.filename}. New results may take a moment to appear in search.`);
+        $("current").textContent = `Signed in. ${r.uploaded} technician profiles are loaded and searchable.`;
+      } catch (err) {
+        status("upload-status", "err", err.message);
+      } finally {
+        $("upload-btn").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
