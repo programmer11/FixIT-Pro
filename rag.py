@@ -102,19 +102,22 @@ def _get_llm():
     return _llm
 
 
+def chat(messages, max_tokens=600, **kwargs):
+    """One chat completion on the shared local model; extra kwargs (e.g. response_format) go to llama.cpp."""
+    with _llm_lock:  # llama.cpp models are not safe to call from several threads at once
+        response = _get_llm().create_chat_completion(
+            messages=messages, temperature=0, max_tokens=max_tokens, **kwargs)
+    return response["choices"][0]["message"]["content"]
+
+
 def answer(question, matches):
     if not matches:
         return "No matching profiles were found. Try describing the job differently."
     context = "\n\n".join(f"[{i}] {m['chunk_text']}" for i, m in enumerate(matches, 1))
-    with _llm_lock:  # llama.cpp models are not safe to call from several threads at once
-        response = _get_llm().create_chat_completion(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Profiles:\n{context}\n\nHome repair question: {question}"},
-            ],
-            temperature=0, max_tokens=600,
-        )
-    return response["choices"][0]["message"]["content"]
+    return chat([
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Profiles:\n{context}\n\nHome repair question: {question}"},
+    ])
 
 
 def load_local_profiles():

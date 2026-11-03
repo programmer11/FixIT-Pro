@@ -4,3 +4,8 @@ llama-cpp-python
 fastapi>=0.110
 uvicorn>=0.29
 python-multipart
+langchain-core>=1.0
+langgraph>=1.0
+langgraph-checkpoint-sqlite
+langchain-community
+ddgs

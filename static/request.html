@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FixIT-Pro — Request a repair</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/workflow.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="logo" href="/"><span class="logo-mark">⌂</span>FixIT-Pro</a>
+      <nav class="nav-links">
+        <a href="/">Find a pro</a>
+        <a class="pill" href="/admin/jobs">Owner console</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="wrap">
+      <section id="new" hidden>
+        <h1>Request a repair</h1>
+        <p class="lead">Tell us what's wrong in your own words. We'll turn it into a service request, find licensed, well-reviewed technicians, and get the owner's approval and quotes. You'll be asked for time slots when it's time to schedule.</p>
+        <form class="box" id="job-form">
+          <label class="field"><span>What needs fixing?</span>
+            <textarea id="req" required minlength="5" maxlength="1000" placeholder="e.g. The kitchen sink faucet keeps dripping and there's water under the cabinet"></textarea></label>
+          <div class="row">
+            <label class="field"><span>Property location</span><input type="text" id="loc" value="Santa Clara" maxlength="80"></label>
+            <label class="field"><span>Your name <span class="meta">(optional)</span></span><input type="text" id="name" maxlength="80"></label>
+          </div>
+          <button class="btn primary" type="submit" id="submit">Submit request</button>
+          <div id="form-status"></div>
+        </form>
+      </section>
+
+      <section id="track" hidden>
+        <h1>Your repair request</h1>
+        <p class="lead">Bookmark this page to check on your request: <a id="link" href="#"></a></p>
+        <div id="stepper"></div>
+        <div id="status"></div>
+        <div class="box"><h2>Service request</h2><div id="sr"></div></div>
+        <div class="box" id="slots-box" hidden>
+          <h2>Pick times for the visit</h2>
+          <p>Give 2 or 3 time slots when the technician can come in, e.g. “Mon Nov 9, 9–11am”.</p>
+          <form id="slots-form">
+            <label class="field"><span>Time slot 1</span><input type="text" class="slot" maxlength="100" required></label>
+            <label class="field"><span>Time slot 2</span><input type="text" class="slot" maxlength="100" required></label>
+            <label class="field"><span>Time slot 3 <span class="meta">(optional)</span></span><input type="text" class="slot" maxlength="100"></label>
+            <button class="btn primary" type="submit">Send time slots</button>
+            <div id="slots-status"></div>
+          </form>
+        </div>
+        <div class="box" id="done-box" hidden></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/static/workflow.js"></script>
+  <script>
+    let jobId = new URLSearchParams(location.search).get("job"), timer = null;
+
+    function show(job) {
+      $("stepper").innerHTML = stepper(job);
+      $("status").innerHTML = statusLine(job);
+      $("sr").innerHTML = serviceRequest(job.service_request);
+      $("slots-box").hidden = !(job.pending && job.pending.step === "scheduling" && job.status === "waiting");
+      const done = $("done-box");
+      done.hidden = !(job.timeslots && job.timeslots.length);
+      if (!done.hidden) done.innerHTML = `<h2>Scheduling</h2><p>${job.selected_name ? `Technician: <strong>${esc(job.selected_name)}</strong>. ` : ""}
+        Your time slots were sent to the owner, who will confirm the visit with the technician.</p>
+        <ul>${job.timeslots.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>`;
+      clearTimeout(timer);
+      if (job.status === "working" || (job.status === "waiting" && job.pending.role !== "tenant"))
+        timer = setTimeout(refresh, job.status === "working" ? 2000 : 10000);
+    }
+
+    async function refresh() {
+      try { show(await api(`/api/jobs/${encodeURIComponent(jobId)}`)); }
+      catch (e) { $("status").innerHTML = `<div class="status err">${esc(e.message)}</div>`; }
+    }
+
+    function track(id) {
+      jobId = id;
+      history.replaceState(null, "", `/request?job=${encodeURIComponent(id)}`);
+      $("new").hidden = true; $("track").hidden = false;
+      $("link").href = location.href; $("link").textContent = location.href;
+      refresh();
+    }
+
+    $("job-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("submit").disabled = true;
+      try {
+        const { id } = await api("/api/jobs", { method: "POST",
+          body: { request: $("req").value.trim(), location: $("loc").value.trim(), tenant_name: $("name").value.trim() } });
+        track(id);
+      } catch (err) {
+        $("form-status").innerHTML = `<div class="status err">${esc(err.message)}</div>`;
+        $("submit").disabled = false;
+      }
+    });
+
+    $("slots-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const timeslots = [...document.querySelectorAll(".slot")].map((i) => i.value.trim()).filter(Boolean);
+      try { show(await api(`/api/jobs/${encodeURIComponent(jobId)}/resume`, { method: "POST", body: { step: "scheduling", value: { timeslots } } })); }
+      catch (err) { $("slots-status").innerHTML = `<div class="status err">${esc(err.message)}</div>`; }
+    });
+
+    if (jobId) track(jobId); else $("new").hidden = false;
+  </script>
+</body>
+</html>

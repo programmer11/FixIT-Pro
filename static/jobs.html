@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FixIT-Pro — Owner console</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/workflow.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="logo" href="/"><span class="logo-mark">⌂</span>FixIT-Pro</a>
+      <nav class="nav-links">
+        <a href="/request">New request</a>
+        <a href="/admin">Admin</a>
+        <a class="pill" href="#" id="logout" hidden>Sign out</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="wrap">
+      <div class="panel" id="login-panel" hidden>
+        <h1>Owner sign in</h1>
+        <p>Enter the admin password (<code>ADMIN_PASSWORD</code> in <code>.env</code>).</p>
+        <form id="login-form">
+          <label class="field"><span>Password</span><input type="password" id="pw" autocomplete="current-password" required></label>
+          <button class="btn primary" type="submit">Sign in</button>
+        </form>
+        <div id="login-status"></div>
+      </div>
+
+      <div id="console" hidden>
+        <h1>Service requests</h1>
+        <p class="lead">Each request moves through seven agents. Steps marked in orange are waiting for you.</p>
+        <div class="console">
+          <div><div class="joblist" id="jobs"></div></div>
+          <div id="detail"><div class="box"><p class="meta">Select a request to review it.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/workflow.js"></script>
+  <script src="/static/jobs.js"></script>
+</body>
+</html>

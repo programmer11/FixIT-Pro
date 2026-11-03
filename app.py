@@ -5,7 +5,7 @@ from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-import rag
+import orchestrator, rag
 
 app = FastAPI(title="FixIT-Pro")
 static = rag.folder / "static"
@@ -72,6 +72,81 @@ async def admin_upload(file: UploadFile = File(...), x_admin_token: str = Header
     return {"uploaded": count, "filename": file.filename}
 
 
+class NewJob(BaseModel):
+    request: str = Field(min_length=5, max_length=1000)
+    location: str = Field(default="Santa Clara", max_length=80)
+    tenant_name: str = Field(default="", max_length=80)
+
+
+class Resume(BaseModel):
+    step: str
+    value: dict
+
+
+def job_or_404(job_id, role):
+    try:
+        return orchestrator.job_view(job_id, role)
+    except KeyError:
+        raise HTTPException(404, "No such job.")
+
+
+def resume_or_400(job_id, step, value, role):
+    try:
+        orchestrator.resume(job_id, step, value, role)
+    except KeyError:
+        raise HTTPException(404, "No such job.")
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+    return orchestrator.job_view(job_id, role)
+
+
+@app.post("/api/jobs")
+def create_job(body: NewJob):
+    return {"id": orchestrator.start_job(body.request.strip(), body.location.strip() or "Santa Clara", body.tenant_name.strip())}
+
+
+@app.get("/api/jobs/{job_id}")
+def get_job(job_id: str):
+    return job_or_404(job_id, "tenant")
+
+
+@app.post("/api/jobs/{job_id}/resume")
+def tenant_resume(job_id: str, body: Resume):
+    return resume_or_400(job_id, body.step, body.value, "tenant")
+
+
+@app.get("/api/admin/jobs")
+def admin_jobs(x_admin_token: str = Header(default="")):
+    require_admin(x_admin_token)
+    return {"jobs": orchestrator.list_jobs()}
+
+
+@app.get("/api/admin/jobs/{job_id}")
+def admin_job(job_id: str, x_admin_token: str = Header(default="")):
+    require_admin(x_admin_token)
+    return job_or_404(job_id, "owner")
+
+
+@app.post("/api/admin/jobs/{job_id}/resume")
+def owner_resume(job_id: str, body: Resume, x_admin_token: str = Header(default="")):
+    require_admin(x_admin_token)
+    return resume_or_400(job_id, body.step, body.value, "owner")
+
+
+@app.post("/api/admin/jobs/{job_id}/retry")
+def owner_retry(job_id: str, x_admin_token: str = Header(default="")):
+    require_admin(x_admin_token)
+    try:
+        orchestrator.retry(job_id)
+    except KeyError:
+        raise HTTPException(404, "No such job.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return orchestrator.job_view(job_id, "owner")
+
+
 @app.get("/")
 def home():
     return FileResponse(static / "index.html")
@@ -80,6 +155,16 @@ def home():
 @app.get("/admin")
 def admin():
     return FileResponse(static / "admin.html")
+
+
+@app.get("/request")
+def request_page():
+    return FileResponse(static / "request.html")
+
+
+@app.get("/admin/jobs")
+def jobs_page():
+    return FileResponse(static / "jobs.html")
 
 
 app.mount("/static", StaticFiles(directory=static), name="static")
