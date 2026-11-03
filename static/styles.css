@@ -100,7 +100,7 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
 .field { display: block; margin: 18px 0; }
 .field span { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
 .field input[type=password] { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
-.drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--muted); }
+.drop { display: block; cursor: pointer; border: 2px dashed var(--line); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--muted); }
 .drop.over { border-color: var(--brand); background: #eaf6fc; }
 .drop strong { color: var(--ink); }
 .optional { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
