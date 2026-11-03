@@ -92,10 +92,91 @@ curl -X POST http://localhost:8000/api/admin/upload \
 | `413` | File larger than 5 MB |
 | `503` | Admin is disabled |
 
+## Repair request workflow
+
+These endpoints run the [repair request workflow](workflow.md). Creating or resuming a job returns at once; the agents run in the background. Poll the job to see progress.
+
+### Job object
+
+`GET` on a job returns:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Job ID |
+| `status` | `working`, `waiting`, `error`, `stalled` or `confirmed` (see [statuses](workflow.md#how-a-job-runs)) |
+| `step` | Graph node that is running or waiting, e.g. `owner_approval` |
+| `agent_index`, `agents` | Position in the seven-agent progress bar, and the agent names |
+| `pending` | When waiting: `{"step", "role", "prompt"}`, where `role` is `owner` or `tenant` |
+| `error` | Error text when `status` is `error` |
+| `request_text`, `service_request`, `timeslots`, `confirmed_at` | Job details |
+
+The tenant view adds `selected_name` and hides owner details: when the owner must act, `pending.prompt` just says "Waiting for the property owner." The owner view adds the full state: `shortlist`, `web_leads`, `quote_requests`, `quotes`, `selected`, `confirmation_message`, `log` and more. See the [state table](code-reference.md#state).
+
+### `POST /api/jobs`
+
+Submits a tenant request and starts the workflow.
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `request` | string | Required, 5–1000 characters |
+| `location` | string | Optional, up to 80 characters; defaults to Santa Clara |
+| `tenant_name` | string | Optional, up to 80 characters |
+
+```bash
+curl -X POST http://localhost:8000/api/jobs -H 'Content-Type: application/json' \
+  -d '{"request": "The kitchen faucet keeps dripping", "location": "Santa Clara"}'
+```
+
+**Response `200`:** `{"id": "310e2993baad4ce5a1fd23ccdfc47990"}`
+
+### `GET /api/jobs/{id}`
+
+The tenant's view of a job. Anyone with the ID can read it, so treat the ID like a private link. **Errors:** `404` unknown job.
+
+### `POST /api/jobs/{id}/resume`
+
+Answers the tenant's step. Body: `{"step": "scheduling", "value": {"timeslots": ["Mon Nov 9, 9-11am", "Tue Nov 10, 1-3pm"]}}`. Give 2 or 3 non-empty slots, up to 100 characters each. Returns the updated job.
+
+### `GET /api/admin/jobs`
+
+**Headers:** `X-Admin-Token`. Returns `{"jobs": [...]}`, the 100 most recent jobs, newest first. Each job has `id`, `created_at`, `request_text`, `title`, `urgency`, `status`, `step`, `agent` and `needs_owner`.
+
+### `GET /api/admin/jobs/{id}`
+
+**Headers:** `X-Admin-Token`. The owner's full view of a job.
+
+### `POST /api/admin/jobs/{id}/resume`
+
+**Headers:** `X-Admin-Token`. Answers an owner step. Body: `{"step": "<step>", "value": {...}}`:
+
+| `step` | `value` |
+| --- | --- |
+| `owner_approval` | `{"approved": true}`, or `{"approved": false, "reject_ids": ["technician-004"], "feedback": "..."}`. An empty or missing `reject_ids` rejects all 3 |
+| `collect_quotes` | `{"quotes": {"technician-003": {"amount": 180, "notes": "parts included"}}}`. At least one quote; leave out technicians who didn't reply |
+| `pricing_approval` | `{"selected_id": "technician-003"}`, or `{"reject": true}` to search again |
+| `confirm_message` | `{"approved": true, "message": "optional edited text"}`, or `{"approved": false, "feedback": "what to change"}` |
+
+Returns the updated job, usually with `status: "working"` while the next agent runs.
+
+### `POST /api/admin/jobs/{id}/retry`
+
+**Headers:** `X-Admin-Token`. Continues a job in `error` or `stalled` status from its last checkpoint.
+
+### Workflow errors
+
+| Status | Cause |
+| --- | --- |
+| `400` | The step isn't the one waiting (or the job is still working), or the answer is invalid, e.g. "Give 2 or 3 time slots." |
+| `401` / `503` | Wrong admin password / admin disabled (admin endpoints) |
+| `403` | Wrong role, e.g. the tenant endpoint answering an owner step |
+| `404` | Unknown job |
+
 ## Pages
 
 | Method and path | Returns |
 | --- | --- |
 | `GET /` | Landing page |
 | `GET /admin` | Admin page |
+| `GET /request` | Tenant repair request page; `?job=<id>` shows a job |
+| `GET /admin/jobs` | Owner console |
 | `GET /static/...` | Styles, scripts and pages |

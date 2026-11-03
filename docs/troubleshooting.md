@@ -47,3 +47,33 @@ The message names the problem and the item number (counting from 1). Common caus
 ### A technician I removed from the file still shows up
 
 Uploads add and update profiles but never delete them. Delete the document `technician-<ID>` in the Pinecone console. See [Removing a technician](admin-guide.md#removing-a-technician).
+
+## Repair request workflow
+
+### A request stays on "working" for a long time
+
+Each agent that writes text calls the local model, which takes 20–60 seconds on CPU, and other searches or requests queue for the same model. If it's still working after several minutes, check the server terminal for errors.
+
+### A request shows "This job was interrupted" or an error
+
+The server stopped during a step, or a step raised an error (for example Pinecone was unreachable). Open it in the owner console and click **Retry from last step**. It continues from the last saved step.
+
+### "This step is not waiting for input"
+
+Someone already answered the step, or an agent is still working. Reload the page to see the current state.
+
+### No internet businesses or websites appear
+
+The free search backend returned nothing, which happens when it's rate-limited. The workflow carries on with database technicians. Results are cached for an hour, and later rejection rounds search again.
+
+### A website link is for the wrong business
+
+Links marked *found by internet search* are matched by name and can be wrong when names are similar. Ignore the link, or reject the technician. To fix it permanently, add the correct URL to the profile's `Additional source` field and upload the profiles again.
+
+### The message drafts read oddly
+
+Pricing and Job Confirmation messages come from a small local model. Edit the final message before approving it, or use **Request changes**. If the activity log says *template*, the model file wasn't found. Check `QWEN_MODEL_PATH`.
+
+### The tenant lost their request link
+
+Open the request in the owner console, click **Tenant's page** under the service request, and send the tenant that page's address.

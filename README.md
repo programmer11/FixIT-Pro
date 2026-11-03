@@ -8,7 +8,7 @@ It's a small retrieval-augmented generation (RAG) app:
 - **Generation:** a local [Qwen 2.5 3B Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) model (GGUF, via `llama-cpp-python`) writes the recommendation, using only the retrieved profiles. No OpenAI key is needed.
 - **Web UI:** a FastAPI server with a landing page, search results as provider cards, and an admin page for uploading profiles.
 
-▶ Watch the 2-minute [demo video](FixIT-Pro-demo.mp4). Full documentation is in [docs/](docs/README.md).
+▶ Watch the [search demo](FixIT-Pro-demo.mp4) and the [repair workflow demo](FixIT-Pro-workflow-demo.mp4). Full documentation is in [docs/](docs/README.md), including the [workflow guide](docs/workflow.md) and [code reference](docs/code-reference.md).
 
 ## Requirements
 
@@ -44,6 +44,27 @@ python3 -m uvicorn app:app --port 8000
 Open http://localhost:8000. Keep the terminal open while you use the app; press Ctrl+C to stop it.
 
 The first AI recommendation takes longer (up to a minute or two on CPU) because the model loads on first use. Provider cards appear right away while the recommendation is generated.
+
+## Repair request workflow (multi-agent)
+
+Tenants can also submit a repair request at http://localhost:8000/request. A [LangGraph](https://langchain-ai.github.io/langgraph/) orchestrator (`orchestrator.py`) moves it through seven agents (`agents.py`), pausing whenever a person must decide:
+
+| # | Agent | What it does | Who acts |
+| --- | --- | --- | --- |
+| 1 | Translate | Turns the tenant's plain text into a service request (title, category, urgency, description) with Qwen. Hazard keywords such as "sparks" or "flooding" always set emergency urgency. | Agent |
+| 2 | Search & Match | Searches Pinecone and the internet (LangChain's DuckDuckGo tool, Bing backend), then ranks database and internet technicians together on job fit 30%, licensing 30%, reviews 25% (rating adjusted for review count) and low cost 15%. Keeps the top 3, each with its business/technician name and website. A missing website is looked up online by name. | Agent |
+| 3 | Owner Approval | Owner approves the 3, or rejects some or all. Rejected technicians are excluded and the search runs again, until the owner approves. | Owner |
+| 4 | Pricing | Drafts a quote request for each technician (email/call links in the console). The owner enters the quotes they get back. | Agent + owner |
+| 5 | Pricing Approval | Owner compares the quotes and picks the final technician, or rejects all and searches again. | Owner |
+| 6 | Scheduling | Tenant gives 2–3 time slots on their request page. | Tenant |
+| 7 | Job Confirmation | Drafts the message asking the technician to confirm a slot. Owner edits and approves it, or asks the agent for changes. | Agent + owner |
+
+The owner works in the **owner console** at http://localhost:8000/admin/jobs (same `ADMIN_PASSWORD`). Each request's progress, agent activity log and the action for the current step are shown there.
+
+- The app doesn't send email or call anyone. It drafts the messages and gives you email and call links, and you enter the quotes you get back.
+- Each step is saved to `workflow.db` (SQLite, git-ignored), so requests survive a server restart. If a step fails or is interrupted, use **Retry from last step** in the console.
+- If the Qwen model file is missing, the agents fall back to keyword rules and message templates, so the workflow still runs.
+- Businesses found on the internet are ranked only on what their search result shows: job fit is discounted, and licensing, rating and fees come from the snippet. They're marked **not verified**, and the ones outside the top 3 are listed under the shortlist. A website found by name search is flagged so the owner can check it's the right business. Individuals listed as "First L." (for example TaskRabbit) only get a link to their profile on that platform.
 
 ## Loading technician profiles
 
@@ -89,9 +110,11 @@ You can also upload profiles from the notebook: put the JSON file next to `home_
 | --- | --- |
 | `app.py` | FastAPI server: pages, search, AI answer and admin upload endpoints |
 | `rag.py` | Pinecone search, profile upload and Qwen answer generation |
+| `agents.py` | The seven workflow agents and the technician ranking |
+| `orchestrator.py` | LangGraph workflow, approval checkpoints, saved job state |
 | `static/` | Landing page, admin page, styles and browser script |
 | `home_repair_rag.ipynb` | The original notebook version of the pipeline |
-| `docs/` | Architecture, setup, user and admin guides, data format, API reference, troubleshooting |
+| `docs/` | Architecture, workflow, code reference, setup, user and admin guides, data format, API reference, troubleshooting |
 
 ## API
 
@@ -100,6 +123,13 @@ You can also upload profiles from the notebook: put the JSON file next to `home_
 | `POST` | `/api/search` | `{"question": "...", "location": "Santa Clara"}` | Top 3 matching profiles |
 | `POST` | `/api/answer` | same as above | AI recommendation and source names |
 | `POST` | `/api/admin/upload` | multipart `file`, header `X-Admin-Token` | Number of profiles uploaded |
+| `POST` | `/api/jobs` | `{"request": "...", "location": "...", "tenant_name": "..."}` | New job `id` |
+| `GET` | `/api/jobs/{id}` | | Tenant's view of the job |
+| `POST` | `/api/jobs/{id}/resume` | `{"step": "scheduling", "value": {"timeslots": [...]}}` | Updated job |
+| `GET` | `/api/admin/jobs` | header `X-Admin-Token` | All jobs and their current step |
+| `GET` | `/api/admin/jobs/{id}` | header `X-Admin-Token` | Full job state for the owner |
+| `POST` | `/api/admin/jobs/{id}/resume` | `{"step": "...", "value": {...}}`, header `X-Admin-Token` | Updated job (owner steps) |
+| `POST` | `/api/admin/jobs/{id}/retry` | header `X-Admin-Token` | Re-runs a failed or interrupted step |
 
 ## Notes
 

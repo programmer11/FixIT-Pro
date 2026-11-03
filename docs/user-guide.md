@@ -33,8 +33,28 @@ The **AI recommendation** panel fills in after the cards, usually within a minut
 
 The recommendation can be wrong or incomplete, and the profile data may be out of date. Always confirm licensing, prices and availability with the provider before hiring. You can check California contractor licenses with the [CSLB license lookup](https://www.cslb.ca.gov/OnlineServices/CheckLicenseII/CheckLicense.aspx).
 
+## Request a repair (tenants)
+
+Use this when you rent and want the property owner to arrange a repair.
+
+1. Open http://localhost:8000/request, or click **Request a repair** in the site header.
+2. Describe the problem in your own words, check the property location, and optionally add your name.
+3. Click **Submit request**.
+
+The page now tracks your request. **Bookmark it**: its address (`/request?job=...`) is the only way back to your request. A progress bar shows the seven steps:
+
+| Step | What happens | You need to |
+| --- | --- | --- |
+| Translate | Your words become a service request, shown under **Service request** | Check it reads right |
+| Search & Match, Owner Approval, Pricing, Pricing Approval | Technicians are found and the owner approves one and its price | Wait. The page updates by itself |
+| Scheduling | **Pick times for the visit** appears | Enter 2 or 3 time slots, e.g. "Mon Nov 9, 9–11am", and click **Send time slots** |
+| Job Confirmation | The owner confirms the visit with the technician | Wait for the owner or technician to contact you |
+
+Urgent hazards such as sparks, a gas smell or flooding are always marked as emergencies. If you're in danger, call emergency services first.
+
 ## Tips
 
 - Name the job, not just the trade: "replace a broken outlet" works better than "electrician".
 - If results look off, rephrase or add detail, such as the room or material.
 - Starting a new search replaces the previous results.
+- On the request page, include where the problem is and what you've noticed ("water under the kitchen sink cabinet"). It helps match the right trade.
