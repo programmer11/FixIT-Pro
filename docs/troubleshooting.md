@@ -77,3 +77,16 @@ Pricing and Job Confirmation messages come from a small local model. Edit the fi
 ### The tenant lost their request link
 
 Open the request in the owner console, click **Tenant's page** under the service request, and send the tenant that page's address.
+
+### A photo or video won't upload
+
+The page names the file and the reason:
+
+- **"isn't a supported photo or video"**: the file isn't JPEG, PNG, GIF, WebP, HEIC, AVIF, MP4, MOV or WebM. This includes a file renamed to look like a photo. Convert it, or take a screenshot of it.
+- **"larger than 15 MB" / "larger than 100 MB"**: photos are limited to 15 MB and videos to 100 MB. Trim the video or send a shorter clip.
+- **"at most 8 photos and videos"**: the request already has 8 files.
+- **"already confirmed"**: files can't be added after the visit is confirmed. Send them to the owner directly.
+
+### A photo shows "no preview — download"
+
+It's a HEIC photo (the iPhone default). Most browsers other than Safari can't display HEIC. Download it and open it on your computer, or set the iPhone camera to **Most Compatible** (Settings → Camera → Formats) to take JPEGs.

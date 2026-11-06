@@ -5,3 +5,5 @@ __pycache__/
 santa_clara_home_repair_profiles.json
 *.bak.json
 workflow.db*
+# Tenant photos and videos
+uploads/

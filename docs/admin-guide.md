@@ -45,7 +45,7 @@ Upload one of the `.bak.json` backup files from the admin page. Profiles added s
 
 Open http://localhost:8000/admin/jobs, or click **Review service requests** on the admin dashboard. Requests are listed on the left, newest first. An orange dot means the request is waiting for you. The list refreshes every 15 seconds.
 
-Click a request to see its progress bar, the current step, the service request and the **Agent activity** log. When it's your turn, the step's form appears at the top:
+Click a request to see its progress bar, the current step, the service request and the **Agent activity** log. A 📎 count in the list means the tenant attached photos or videos. They appear under **Photos and videos from the tenant**: click a photo to open it full size, play videos in place, or click a file name to download it. iPhone HEIC photos can't be previewed in most browsers, so download them instead. When it's your turn, the step's form appears at the top:
 
 ### 1. Approve the top technicians
 
@@ -57,7 +57,7 @@ Each card shows the **business or technician name**, its **website** and its sou
 
 ### 2. Get pricing quotes
 
-The Pricing agent has drafted a quote request for each technician. Use **Email** (opens your mail app with the message filled in), **Call** or **Website** to contact them. When they reply, enter each price and any notes, then click **Save quotes**. Leave a price blank if a technician didn't reply; at least one is needed.
+The Pricing agent has drafted a quote request for each technician. If the tenant attached photos or videos, the message says so, and they're shown on this step. Download them and attach them to your email. Use **Email** (opens your mail app with the message filled in), **Call** or **Website** to contact them. When they reply, enter each price and any notes, then click **Save quotes**. Leave a price blank if a technician didn't reply; at least one is needed.
 
 ### 3. Choose the final technician
 

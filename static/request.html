@@ -26,6 +26,10 @@
         <form class="box" id="job-form">
           <label class="field"><span>What needs fixing?</span>
             <textarea id="req" required minlength="5" maxlength="1000" placeholder="e.g. The kitchen sink faucet keeps dripping and there's water under the cabinet"></textarea></label>
+          <label class="field"><span>Photos or videos <span class="meta">(optional)</span></span>
+            <input type="file" id="files" multiple accept="image/*,video/*,.heic">
+            <span class="meta">Show the problem: up to 8 files. Photos up to 15 MB, videos up to 100 MB.</span></label>
+          <ul class="chosen" id="chosen"></ul>
           <div class="row">
             <label class="field"><span>Property location</span><input type="text" id="loc" value="Santa Clara" maxlength="80"></label>
             <label class="field"><span>Your name <span class="meta">(optional)</span></span><input type="text" id="name" maxlength="80"></label>
@@ -41,6 +45,16 @@
         <div id="stepper"></div>
         <div id="status"></div>
         <div class="box"><h2>Service request</h2><div id="sr"></div></div>
+        <div class="box" id="media-box">
+          <h2>Photos and videos</h2>
+          <div id="media"></div>
+          <form id="more-form">
+            <label class="field"><span>Add more <span class="meta">(optional)</span></span>
+              <input type="file" id="more" multiple accept="image/*,video/*,.heic"></label>
+            <button class="btn" type="submit" id="more-btn" disabled>Upload</button>
+            <div id="more-status"></div>
+          </form>
+        </div>
         <div class="box" id="slots-box" hidden>
           <h2>Pick times for the visit</h2>
           <p>Give 2 or 3 time slots when the technician can come in, e.g. “Mon Nov 9, 9–11am”.</p>
@@ -59,12 +73,23 @@
 
   <script src="/static/workflow.js"></script>
   <script>
-    let jobId = new URLSearchParams(location.search).get("job"), timer = null;
+    let jobId = new URLSearchParams(location.search).get("job"), timer = null, mediaCount = 0;
+    const status = (id, cls, text) => { $(id).innerHTML = `<div class="status ${cls}">${esc(text)}</div>`; };
+
+    $("files").addEventListener("change", () => {
+      const files = [...$("files").files], problem = checkFiles(files);
+      $("chosen").innerHTML = files.map((f) => `<li>📎 ${esc(f.name)} · ${esc(fmtSize(f.size))}</li>`).join("");
+      $("form-status").innerHTML = problem ? `<div class="status err">${esc(problem)}</div>` : "";
+    });
 
     function show(job) {
       $("stepper").innerHTML = stepper(job);
       $("status").innerHTML = statusLine(job);
       $("sr").innerHTML = serviceRequest(job.service_request);
+      mediaCount = job.media.length;
+      keepGalleries($("media"), () => { $("media").innerHTML = gallery(job.media)
+        || `<p class="meta">No photos or videos yet. They help the owner and technicians understand the problem.</p>`; });
+      $("more-form").hidden = job.status === "confirmed";
       $("slots-box").hidden = !(job.pending && job.pending.step === "scheduling" && job.status === "waiting");
       const done = $("done-box");
       done.hidden = !(job.timeslots && job.timeslots.length);
@@ -91,10 +116,17 @@
 
     $("job-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const files = [...$("files").files], problem = checkFiles(files);
+      if (problem) return status("form-status", "err", problem);
+      const form = new FormData();
+      form.append("request", $("req").value.trim());
+      form.append("location", $("loc").value.trim());
+      form.append("tenant_name", $("name").value.trim());
+      files.forEach((f) => form.append("files", f));
       $("submit").disabled = true;
+      if (files.length) status("form-status", "info", `Uploading ${files.length} file${files.length > 1 ? "s" : ""}…`);
       try {
-        const { id } = await api("/api/jobs", { method: "POST",
-          body: { request: $("req").value.trim(), location: $("loc").value.trim(), tenant_name: $("name").value.trim() } });
+        const { id } = await upload("/api/jobs", form);
         track(id);
       } catch (err) {
         $("form-status").innerHTML = `<div class="status err">${esc(err.message)}</div>`;
@@ -107,6 +139,25 @@
       const timeslots = [...document.querySelectorAll(".slot")].map((i) => i.value.trim()).filter(Boolean);
       try { show(await api(`/api/jobs/${encodeURIComponent(jobId)}/resume`, { method: "POST", body: { step: "scheduling", value: { timeslots } } })); }
       catch (err) { $("slots-status").innerHTML = `<div class="status err">${esc(err.message)}</div>`; }
+    });
+
+    $("more").addEventListener("change", () => {
+      const problem = checkFiles([...$("more").files], mediaCount);
+      $("more-btn").disabled = !$("more").files.length || !!problem;
+      $("more-status").innerHTML = problem ? `<div class="status err">${esc(problem)}</div>` : "";
+    });
+    $("more-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = new FormData();
+      [...$("more").files].forEach((f) => form.append("files", f));
+      $("more-btn").disabled = true;
+      status("more-status", "info", "Uploading…");
+      try {
+        show(await upload(`/api/jobs/${encodeURIComponent(jobId)}/media`, form));
+        $("more").value = ""; status("more-status", "ok", "Uploaded. The owner can see them now.");
+      } catch (err) {
+        status("more-status", "err", err.message); $("more-btn").disabled = false;
+      }
     });
 
     if (jobId) track(jobId); else $("new").hidden = false;

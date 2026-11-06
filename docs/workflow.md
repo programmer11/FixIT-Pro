@@ -4,6 +4,14 @@ A tenant describes a problem in plain words. Seven agents turn it into a confirm
 
 The workflow is a [LangGraph](https://langchain-ai.github.io/langgraph/) state graph (`orchestrator.py`). The agents (`agents.py`) use LangChain prompts, output parsers and the DuckDuckGo search tool, and the shared local Qwen model.
 
+## Photos and videos
+
+The tenant can attach photos and videos when submitting, and add more later from their request page. `media.py` stores them per job, outside the workflow state, so the tenant can add files while the graph is waiting at a gate.
+
+The local Qwen model reads text only, so no agent looks at the images. They're for people: the owner sees them in the console, and the **Pricing** agent adds an exact line to each quote request, for example "The tenant has shared 2 photos and 1 video of the problem, which I've attached", so the owner remembers to attach them.
+
+Uploads are checked by content, not file name. Only common photo and video formats are accepted (no SVG or HTML), and files are served sandboxed with their detected type, so an uploaded file can never run as a page on the site.
+
 ## The seven agents
 
 | # | Agent | Does | Waits for |

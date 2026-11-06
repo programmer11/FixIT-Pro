@@ -11,7 +11,7 @@ from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
-import rag
+import media, rag
 
 CATEGORIES = ("Plumbing", "Electrical", "Drywall", "Painting", "Doors & windows", "Assembly", "Mounting",
               "Fences & gates", "Appliances", "Gutters", "Flooring & tile", "Roofing", "HVAC", "General handyman")
@@ -367,13 +367,16 @@ def contact_of_candidate(c):
     return {**contact_of(c["fields"]), "website": (c.get("website") or {}).get("url", "")}
 
 
-def pricing_agent(state):
+def pricing_agent(state, config):
     sr = state["service_request"]
+    attached = media.describe(media.list_media(config["configurable"]["thread_id"]))
     try:
         body = (QUOTE_PROMPT | LocalQwen(max_tokens=250) | StrOutputParser()).invoke(sr).strip() or quote_body_fallback(sr)
         how = "Qwen"
     except Exception as e:
         body, how = quote_body_fallback(sr), f"template ({type(e).__name__})"
+    if attached:  # added after the model's text so the count is always exact
+        body += f"\n\nThe tenant has shared {attached} of the problem, which I've attached."
     requests = [{"tech_id": c["id"], "name": c["name"], **contact_of_candidate(c),
                  "message": f"Hi {c['name']},\n\n{body}\n\nThank you,\nProperty owner"} for c in state["shortlist"]]
     return {"quote_requests": requests,

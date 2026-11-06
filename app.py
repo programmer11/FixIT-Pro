@@ -1,15 +1,25 @@
 """Web UI for the home repair matcher. Run: python3 -m uvicorn app:app --port 8000"""
-import json, os, secrets, shutil
+import json, os, secrets, shutil, uuid
 from datetime import datetime
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from urllib.parse import quote
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-import orchestrator, rag
+import media, orchestrator, rag
 
 app = FastAPI(title="FixIT-Pro")
 static = rag.folder / "static"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+@app.middleware("http")
+async def limit_media_uploads(request: Request, call_next):
+    """Reject oversized photo/video uploads before the body is read (FastAPI spools whole uploads to disk)."""
+    if request.method == "POST" and request.url.path.startswith("/api/jobs") and \
+            int(request.headers.get("content-length") or 0) > media.MAX_REQUEST_BYTES:
+        return JSONResponse({"detail": f"Upload is larger than {media.MAX_REQUEST_BYTES // (1024 * 1024)} MB."}, 413)
+    return await call_next(request)
 
 
 class Ask(BaseModel):
@@ -72,12 +82,6 @@ async def admin_upload(file: UploadFile = File(...), x_admin_token: str = Header
     return {"uploaded": count, "filename": file.filename}
 
 
-class NewJob(BaseModel):
-    request: str = Field(min_length=5, max_length=1000)
-    location: str = Field(default="Santa Clara", max_length=80)
-    tenant_name: str = Field(default="", max_length=80)
-
-
 class Resume(BaseModel):
     step: str
     value: dict
@@ -102,9 +106,41 @@ def resume_or_400(job_id, step, value, role):
     return orchestrator.job_view(job_id, role)
 
 
+async def save_media_or_400(job_id, files):
+    try:
+        return await media.save(job_id, files)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/api/jobs")
-def create_job(body: NewJob):
-    return {"id": orchestrator.start_job(body.request.strip(), body.location.strip() or "Santa Clara", body.tenant_name.strip())}
+async def create_job(request: str = Form(min_length=5, max_length=1000), location: str = Form("Santa Clara", max_length=80),
+                     tenant_name: str = Form("", max_length=80), files: list[UploadFile] = File(default=[])):
+    """Multipart form: the tenant's request plus optional photos/videos. Files are checked before the job starts."""
+    job_id = uuid.uuid4().hex
+    await save_media_or_400(job_id, files)
+    return {"id": orchestrator.start_job(request.strip(), location.strip() or "Santa Clara", tenant_name.strip(), job_id=job_id)}
+
+
+@app.post("/api/jobs/{job_id}/media")
+async def add_media(job_id: str, files: list[UploadFile] = File(...)):
+    view = job_or_404(job_id, "tenant")
+    if view["status"] == "confirmed":
+        raise HTTPException(400, "This request is already confirmed. Send further photos to the owner directly.")
+    await save_media_or_400(job_id, files)
+    return job_or_404(job_id, "tenant")
+
+
+@app.get("/api/jobs/{job_id}/media/{media_id}")
+def get_media(job_id: str, media_id: str):
+    try:
+        path, entry = media.file_of(job_id, media_id)
+    except KeyError:
+        raise HTTPException(404, "No such file.")
+    # Served with its detected type only; sandboxed so a file can never run as a page on this site.
+    return FileResponse(path, media_type=entry["mime"], headers={
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(entry['name'])}", "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "sandbox", "Cache-Control": "private, max-age=3600"})
 
 
 @app.get("/api/jobs/{job_id}")

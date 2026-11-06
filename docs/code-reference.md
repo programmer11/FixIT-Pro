@@ -10,6 +10,7 @@ Where the code lives and how to change it. For the concepts behind it, read [Arc
 | `rag.py` | Pinecone connection, profile upload, search, and `chat()` for the shared local Qwen model |
 | `agents.py` | The work agents, the technician ranking, internet search and website matching |
 | `orchestrator.py` | The LangGraph graph, the human gates, checkpointing, the background runner and the job views |
+| `media.py` | Tenant photo and video uploads: type detection, size limits, storage and lookup |
 | `static/request.html` | Tenant page: submit a request, follow progress, enter time slots |
 | `static/jobs.html`, `static/jobs.js` | Owner console: job list and one view per waiting step |
 | `static/workflow.js`, `static/workflow.css` | Helpers and styles shared by the two workflow pages |
@@ -38,7 +39,7 @@ Each takes the current `JobState` and returns a partial update. Every update inc
 | --- | --- | --- |
 | `translate_agent` | `request_text`, `location` | `service_request` |
 | `search_match_agent` | `service_request`, `excluded_ids`, `search_round` | `shortlist`, `web_leads`, `excluded_ids`, `search_round` |
-| `pricing_agent` | `service_request`, `shortlist` | `quote_requests` |
+| `pricing_agent` | `service_request`, `shortlist`, and the job's media via `config` | `quote_requests` |
 | `job_confirmation_agent` | `service_request`, `selected`, `timeslots`, `tenant_name`, `message_feedback` | `confirmation_message` |
 
 ### Ranking
@@ -63,6 +64,19 @@ Each takes the current `JobState` and returns a partial update. Every update inc
 ### Helpers
 
 `ServiceRequest` (the Translate output schema and `CATEGORIES`), `rule_urgency` (the hazard-keyword urgency floor), `contact_of` / `contact_of_candidate` (phone, email and website pulled from a candidate), `quote_text` (a quote as display text, e.g. "$180.00 (parts included)"). The prompts are `TRANSLATE_PROMPT`, `QUOTE_PROMPT` and `CONFIRM_PROMPT`.
+
+## `media.py`
+
+| Name | What it does |
+| --- | --- |
+| `save(job_id, files)` | Async. Validates and stores FastAPI `UploadFile`s, streaming each to disk while enforcing `MAX_BYTES`. All or nothing: on any error it deletes what it wrote and raises `ValueError` |
+| `sniff(head)` | `(kind, mime, extension)` from a file's first bytes, or `None` for unsupported formats |
+| `list_media(job_id)` | The job's entries from `index.json`: `id`, `kind`, `mime`, `file`, `name`, `size`, `uploaded_at` |
+| `file_of(job_id, media_id)` | `(path, entry)` for serving one file; `KeyError` if missing |
+| `describe(items)` | Text such as "2 photos and 1 video", used in quote requests |
+| `MAX_FILES`, `MAX_BYTES`, `MAX_REQUEST_BYTES` | Limits. `MEDIA_LIMITS` in `static/workflow.js` mirrors them for checks before uploading |
+
+Job IDs are checked to be 32 hex characters before any path is built, and files are saved under generated names, so neither a job ID nor an upload's name can reach other folders. Media lives outside the LangGraph state, so adding files never touches a checkpoint. Agents that need it read it by job ID: `pricing_agent(state, config)` takes the job ID from `config["configurable"]["thread_id"]`.
 
 ## `orchestrator.py`
 
@@ -92,11 +106,11 @@ Each takes the current `JobState` and returns a partial update. Every update inc
 
 | Function | What it does |
 | --- | --- |
-| `start_job(request_text, location, tenant_name)` | Records the job and runs the graph in the background; returns the job ID |
+| `start_job(request_text, location, tenant_name, job_id=None)` | Records the job and runs the graph in the background; returns the job ID. `app.py` passes a pre-made ID so uploads can be saved and checked first |
 | `validate(step, value, state)` | Checks and cleans an answer for a step; raises `ValueError` with a user-facing message |
 | `resume(job_id, step, value, role)` | Resumes a waiting job. Raises `ValueError` if that step isn't waiting, `PermissionError` for the wrong role |
 | `retry(job_id)` | Continues an `error` or `stalled` job from its last checkpoint |
-| `job_view(job_id, role)` | The job as the tenant (limited fields) or owner (everything) sees it |
+| `job_view(job_id, role)` | The job as the tenant (limited fields) or owner (everything) sees it. Both include `media` with URLs |
 | `list_jobs()` | The 100 most recent jobs with status, for the console |
 
 Only one background run per job is allowed at a time. `_guard` makes the check-and-start atomic, so two clicks can't answer the same step twice.

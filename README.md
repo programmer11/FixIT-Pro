@@ -47,7 +47,7 @@ The first AI recommendation takes longer (up to a minute or two on CPU) because 
 
 ## Repair request workflow (multi-agent)
 
-Tenants can also submit a repair request at http://localhost:8000/request. A [LangGraph](https://langchain-ai.github.io/langgraph/) orchestrator (`orchestrator.py`) moves it through seven agents (`agents.py`), pausing whenever a person must decide:
+Tenants can also submit a repair request at http://localhost:8000/request, with photos or videos of the problem. A [LangGraph](https://langchain-ai.github.io/langgraph/) orchestrator (`orchestrator.py`) moves it through seven agents (`agents.py`), pausing whenever a person must decide:
 
 | # | Agent | What it does | Who acts |
 | --- | --- | --- | --- |
@@ -62,6 +62,7 @@ Tenants can also submit a repair request at http://localhost:8000/request. A [La
 The owner works in the **owner console** at http://localhost:8000/admin/jobs (same `ADMIN_PASSWORD`). Each request's progress, agent activity log and the action for the current step are shown there.
 
 - The app doesn't send email or call anyone. It drafts the messages and gives you email and call links, and you enter the quotes you get back.
+- Tenant photos and videos are stored in `uploads/` (git-ignored), shown to the owner in the console, and mentioned in the quote requests so the owner can attach them. The local model reads text only, so the agents don't look at the images.
 - Each step is saved to `workflow.db` (SQLite, git-ignored), so requests survive a server restart. If a step fails or is interrupted, use **Retry from last step** in the console.
 - If the Qwen model file is missing, the agents fall back to keyword rules and message templates, so the workflow still runs.
 - Businesses found on the internet are ranked only on what their search result shows: job fit is discounted, and licensing, rating and fees come from the snippet. They're marked **not verified**, and the ones outside the top 3 are listed under the shortlist. A website found by name search is flagged so the owner can check it's the right business. Individuals listed as "First L." (for example TaskRabbit) only get a link to their profile on that platform.
@@ -112,6 +113,7 @@ You can also upload profiles from the notebook: put the JSON file next to `home_
 | `rag.py` | Pinecone search, profile upload and Qwen answer generation |
 | `agents.py` | The seven workflow agents and the technician ranking |
 | `orchestrator.py` | LangGraph workflow, approval checkpoints, saved job state |
+| `media.py` | Tenant photo and video uploads: validation and storage |
 | `static/` | Landing page, admin page, styles and browser script |
 | `home_repair_rag.ipynb` | The original notebook version of the pipeline |
 | `docs/` | Architecture, workflow, code reference, setup, user and admin guides, data format, API reference, troubleshooting |
@@ -123,7 +125,9 @@ You can also upload profiles from the notebook: put the JSON file next to `home_
 | `POST` | `/api/search` | `{"question": "...", "location": "Santa Clara"}` | Top 3 matching profiles |
 | `POST` | `/api/answer` | same as above | AI recommendation and source names |
 | `POST` | `/api/admin/upload` | multipart `file`, header `X-Admin-Token` | Number of profiles uploaded |
-| `POST` | `/api/jobs` | `{"request": "...", "location": "...", "tenant_name": "..."}` | New job `id` |
+| `POST` | `/api/jobs` | multipart: `request`, `location`, `tenant_name`, optional `files` (photos/videos) | New job `id` |
+| `POST` | `/api/jobs/{id}/media` | multipart `files` | Adds photos/videos to a request |
+| `GET` | `/api/jobs/{id}/media/{media_id}` | | One uploaded photo or video |
 | `GET` | `/api/jobs/{id}` | | Tenant's view of the job |
 | `POST` | `/api/jobs/{id}/resume` | `{"step": "scheduling", "value": {"timeslots": [...]}}` | Updated job |
 | `GET` | `/api/admin/jobs` | header `X-Admin-Token` | All jobs and their current step |

@@ -27,6 +27,7 @@ Create a `.env` file in the project folder. It is git-ignored; never commit it.
 | `PINECONE_INDEX_NAME` | Yes | Name of the Pinecone index |
 | `QWEN_MODEL_PATH` | Yes, unless the default path exists | Full path to the GGUF model file |
 | `ADMIN_PASSWORD` | No | Enables the `/admin` page and owner console. Without it, admin requests return "Admin is disabled" |
+| `UPLOADS_DIR` | No | Folder for tenant photos and videos. Defaults to `uploads/` in the project folder |
 | `WORKFLOW_DB` | No | Path of the repair-request database. Defaults to `workflow.db` in the project folder; point it elsewhere to keep test or demo requests separate |
 
 Example:
@@ -75,6 +76,8 @@ See [Profile data format](data-format.md) for the file layout.
 ## Workflow data
 
 Repair requests are stored in `workflow.db` (SQLite) in the project folder, or at `WORKFLOW_DB` if set. It is git-ignored. Delete it while the server is stopped to clear all requests.
+
+Tenant photos and videos are saved in `uploads/<job id>/` (or `UPLOADS_DIR`), also git-ignored. Each file gets a generated name; `index.json` in the folder lists the original names. Videos can be large, so keep an eye on disk space, and delete a job's folder when you no longer need it. To clear everything, delete `uploads/` along with `workflow.db`.
 
 ## Costs
 
