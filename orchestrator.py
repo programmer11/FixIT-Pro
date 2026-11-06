@@ -10,7 +10,7 @@ translate -> search_match -> owner_approval --rejected--> search_match (rejected
 
 Work agents live in agents.py. The *_gate nodes below only pause for a person (LangGraph interrupt) and route,
 so resuming never repeats an LLM call. Every step is checkpointed to SQLite, so jobs survive a server restart."""
-import operator, os, sqlite3, threading, uuid
+import contextvars, operator, os, sqlite3, threading, uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal, TypedDict
@@ -150,7 +150,7 @@ def _config(job_id):
 
 def _run(job_id, payload):
     try:
-        graph.invoke(payload, _config(job_id))
+        graph.invoke(payload, {**_config(job_id), "run_name": "repair_workflow", "metadata": {"job_id": job_id}})
     except Exception as e:
         _errors[job_id] = f"{type(e).__name__}: {e}"
     finally:
@@ -164,7 +164,8 @@ def _launch(job_id, payload):
         raise ValueError("This job is still being processed. Try again in a moment.")
     _active.add(job_id)
     _errors.pop(job_id, None)
-    threading.Thread(target=_run, args=(job_id, payload), daemon=True).start()
+    # Copy the caller's context so a LangSmith trace that started the job also contains its agent runs.
+    threading.Thread(target=contextvars.copy_context().run, args=(_run, job_id, payload), daemon=True).start()
 
 
 def _snapshot(job_id):

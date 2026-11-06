@@ -1,7 +1,6 @@
 """The seven agents of the repair workflow. Each work agent is a LangGraph node that returns a state update;
 the human checkpoints (owner/tenant input) live in orchestrator.py so LLM calls never re-run on resume."""
 import hashlib, math, re, time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -10,6 +9,9 @@ from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.prompts import ChatPromptTemplate
+from langsmith import traceable  # no-op unless LANGSMITH_TRACING is on
+from langsmith.run_helpers import get_current_run_tree
+from langsmith.utils import ContextThreadPoolExecutor  # keeps worker-thread runs inside the current trace
 from pydantic import BaseModel, Field
 import media, rag
 
@@ -26,12 +28,20 @@ class LocalQwen(BaseChatModel):
     def _llm_type(self):
         return "llama-cpp-qwen"
 
+    def _get_ls_params(self, stop=None, **kwargs):
+        """Provider and model shown on this model's LangSmith LLM runs."""
+        return {**super()._get_ls_params(stop=stop, **kwargs), "ls_provider": "llama.cpp",
+                "ls_model_name": rag.model_name(), "ls_temperature": 0, "ls_max_tokens": self.max_tokens}
+
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         roles = {"system": "system", "human": "user", "ai": "assistant"}
         extra = {"response_format": {"type": "json_object", "schema": self.json_schema}} if self.json_schema else {}
-        text = rag.chat([{"role": roles.get(m.type, "user"), "content": m.content} for m in messages],
-                        max_tokens=self.max_tokens, stop=stop, **extra)
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
+        response = rag.complete([{"role": roles.get(m.type, "user"), "content": m.content} for m in messages],
+                                max_tokens=self.max_tokens, stop=stop, **extra)
+        message = AIMessage(content=response["choices"][0]["message"]["content"], usage_metadata=rag.usage_of(response),
+                            response_metadata={"model_name": rag.model_name(),
+                                               "finish_reason": response["choices"][0].get("finish_reason")})
+        return ChatResult(generations=[ChatGeneration(message=message)])
 
 
 def log(agent, text):
@@ -134,6 +144,9 @@ def review_score(f, prior=4.0, weight=10):
 WEIGHTS = {"relevance": 0.30, "license": 0.30, "reviews": 0.25, "cost": 0.15}
 
 
+@traceable(run_type="tool", name="rank_candidates",
+           process_inputs=lambda i: {"candidates": [{"id": m["id"], "score": m["score"], "source": m.get("source", "database")} for m in i["matches"]]},
+           process_outputs=lambda r: {"ranked": [{k: c[k] for k in ("id", "name", "source", "score", "breakdown", "reasons")} for c in r]})
 def rank_candidates(matches):
     """Score search matches on fit, licensing, reviews and cost (the selection criteria); best first."""
     top = max((m["score"] for m in matches), default=1) or 1
@@ -182,9 +195,13 @@ def site_label(link, kind):
 _search_cache = {}  # query -> (time, results); the free search backend rate-limits repeated queries
 
 
+@traceable(run_type="tool", name="web_search")
 def web_search(query, max_results=6):
     """LangChain DuckDuckGo search tool (Bing backend: the others often return nothing). Empty if unavailable."""
     cached = _search_cache.get((query, max_results))
+    run = get_current_run_tree()
+    if run:
+        run.set(metadata={"cache_hit": bool(cached and time.time() - cached[0] < 3600)})
     if cached and time.time() - cached[0] < 3600:
         return [dict(r) for r in cached[1]]
     results = _web_search(query, max_results)
@@ -236,6 +253,7 @@ def profile_website(fields):
 _website_cache = {}
 
 
+@traceable(run_type="tool", name="find_website")
 def find_website(name, location, platform=""):
     """Search the web for this business's site; only accept a result that actually names it. Individuals listed as
     'First L.' are too ambiguous to match by name alone, so only their profile on their listed platform counts."""
@@ -269,7 +287,7 @@ def web_candidates(sr, top_score):
     trade = "handyman" if sr["category"] == "General handyman" else sr["category"].lower()
     seen, candidates, leads = set(), [], []
     queries = (f"{trade} repair services {sr['location']} CA", f"licensed {trade} contractor {sr['location']} CA reviews")
-    with ThreadPoolExecutor(max_workers=2) as ex:
+    with ContextThreadPoolExecutor(max_workers=2) as ex:
         results = [r for batch in ex.map(lambda q: web_search(q, max_results=8), queries) for r in batch]
     for r in results:
         url = urlparse(r["link"])
@@ -326,7 +344,7 @@ def search_match_agent(state):
     for c in shortlist:
         c["website"] = c["website"] or profile_website(c["fields"])
     missing = [c for c in shortlist if not c["website"]]
-    with ThreadPoolExecutor(max_workers=3) as ex:
+    with ContextThreadPoolExecutor(max_workers=3) as ex:
         found = ex.map(lambda c: find_website(c["name"], sr["location"], c["fields"].get("Source platform", "")), missing)
         for c, site in zip(missing, found):
             c["website"] = site

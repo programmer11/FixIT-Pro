@@ -6,6 +6,7 @@ and video formats are accepted (no SVG or HTML, which a browser could run as a p
 import json, os, re, threading, uuid
 from datetime import datetime
 from pathlib import Path
+from langsmith import traceable  # no-op unless LANGSMITH_TRACING is on
 import rag
 
 uploads_dir = Path(os.getenv("UPLOADS_DIR") or rag.folder / "uploads")
@@ -63,6 +64,9 @@ def _display_name(filename):
     return name[:100] or "upload"
 
 
+@traceable(run_type="tool", name="media.save",
+           process_inputs=lambda i: {"job_id": i["job_id"], "files": [f.filename for f in i["files"]]},
+           process_outputs=lambda saved: {"saved": [{k: m[k] for k in ("id", "kind", "mime", "name", "size")} for m in saved or []]})
 async def save(job_id, files):
     """Validate and store uploaded files (FastAPI UploadFiles). All or nothing: on any error, nothing is kept
     and ValueError explains why. Returns the new media entries."""
