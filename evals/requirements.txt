@@ -1,0 +1,4 @@
+-r ../requirements.txt
+langsmith>=0.4
+httpx          # FastAPI TestClient
+openpyxl       # --update-sheet
