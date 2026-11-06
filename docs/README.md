@@ -2,7 +2,7 @@
 
 FixIT-Pro matches home repair requests in the Santa Clara area to local technicians. It searches technician profiles in Pinecone and uses a local Qwen model to write a short recommendation. A seven-agent workflow then takes a tenant's request through owner approvals, quotes and scheduling to a confirmed visit.
 
-For a quick start, see the [project README](../README.md). To see the app in action, watch the [search demo](../FixIT-Pro-demo.mp4) and the [workflow demo](../FixIT-Pro-workflow-demo.mp4).
+For a quick start, see the [project README](../README.md). To see the app in action, watch the [search demo](../FixIT-Pro-demo.mp4), the [workflow demo](../FixIT-Pro-workflow-demo.mp4) and the [evaluation demo](../FixIT-Pro-evals-demo.mp4).
 
 | Guide | Read it when you want to… |
 | --- | --- |
@@ -15,3 +15,5 @@ For a quick start, see the [project README](../README.md). To see the app in act
 | [Profile data format](data-format.md) | Prepare or edit a profiles JSON file |
 | [API reference](api.md) | Call the HTTP endpoints directly |
 | [Troubleshooting](troubleshooting.md) | Fix common problems |
+| [Evaluations and tracing](evals.md) | Run the test cases and golden dataset, read LangSmith traces, add a case |
+| [Evaluation report](eval-report.md) | See what changed in the latest improvement round and the results before and after |

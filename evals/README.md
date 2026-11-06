@@ -90,3 +90,20 @@ The local Qwen model and the internet search are real. A few cases replace one d
 | `update_sheet.py` | Writes results into the spreadsheet |
 
 The app's own tracing (`rag.py`, `agents.py`, `media.py`, `orchestrator.py`) is a no-op unless tracing is on. Set `LANGSMITH_TRACING=true` in `.env` to trace the running app too.
+
+## Golden dataset evaluation
+
+[`../FixIT-Pro_golden_dataset.xlsx`](../FixIT-Pro_golden_dataset.xlsx) holds 118 reference examples with correct outputs (retrieval, translate, ranking, recommendation, messages). `golden.py` runs them as a LangSmith experiment and `golden_report.py` analyses it.
+
+```bash
+python3 -m evals.golden                                    # all sheets (~17 min)
+python3 -m evals.golden --sheets Translate,Messages        # some sheets
+python3 -m evals.golden --compare evals/results/golden-<before>                       # run, then compare
+python3 -m evals.golden --compare evals/results/golden-<a> evals/results/golden-<b>   # compare two saved runs
+python3 -m evals.golden --rescore evals/results/golden-<run>   # re-score saved outputs after fixing a check or label
+```
+
+- **Dataset sync**: the spreadsheet is synced to the LangSmith dataset `fixit-pro-golden` (split = sheet, `metadata.golden_id` = row ID) before each run.
+- **Fixed profile set**: the labels were made against profiles 001–036, so the run loads exactly those into Pinecone namespace `fixit-pro-golden-v1`. Profiles added to the app's file later don't change golden results. To widen it, relabel, then change `PROFILE_IDS` and `GOLDEN_NAMESPACE` in `golden.py`.
+- **Checks** are deterministic; each failed check is labeled with a failure mode. Known-failure rows are expected to fail until the bug is fixed.
+- **Outputs** in `evals/results/golden-<run>/`: `golden_results.json`, `analysis.json`, `golden_eval.xlsx`, and with `--compare` also `compare.md` / `compare.json` (pass rate and metrics per sheet, fixed and regressed examples, failure-mode counts). Only a run of every sheet replaces `FixIT-Pro_golden_eval.xlsx`.

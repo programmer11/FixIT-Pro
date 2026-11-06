@@ -7,7 +7,7 @@ Where the code lives and how to change it. For the concepts behind it, read [Arc
 | File | Responsibility |
 | --- | --- |
 | `app.py` | FastAPI server: pages, search, admin upload and the job endpoints. Thin: validation and HTTP errors only |
-| `rag.py` | Pinecone connection, profile upload, search, and `chat()` for the shared local Qwen model |
+| `rag.py` | Pinecone connection, profile upload, search, and the shared local Qwen model (`complete()`, `chat()`) |
 | `agents.py` | The work agents, the technician ranking, internet search and website matching |
 | `orchestrator.py` | The LangGraph graph, the human gates, checkpointing, the background runner and the job views |
 | `media.py` | Tenant photo and video uploads: type detection, size limits, storage and lookup |
@@ -22,14 +22,17 @@ Where the code lives and how to change it. For the concepts behind it, read [Arc
 | --- | --- |
 | `search(question, top_k=3)` | Pinecone semantic search; returns `id`, `score`, `title`, `chunk_text` and parsed `fields` per match |
 | `upsert_profiles(profiles)` | Validates and uploads profiles in batches of 50 |
-| `chat(messages, max_tokens=600, **kwargs)` | One chat completion on the shared Qwen model, holding a lock because llama.cpp isn't thread-safe. Extra arguments such as `response_format` go to llama.cpp |
+| `complete(messages, max_tokens=600, **kwargs)` | One chat completion on the shared Qwen model, holding a lock because llama.cpp isn't thread-safe; returns llama.cpp's full response (text and token usage). Extra arguments such as `response_format` go to llama.cpp |
+| `chat(messages, max_tokens=600, **kwargs)` | The text of one completion, traced as a LangSmith LLM run with token counts. Used for the search recommendation |
+| `usage_of(response)` | llama.cpp token usage as `input_tokens` / `output_tokens` / `total_tokens` |
+| `model_path()`, `model_name()` | The configured GGUF path and its name, shown on LLM runs |
 | `answer(question, matches)` | The search page's AI recommendation |
 
 ## `agents.py`
 
 ### LangChain model
 
-`LocalQwen` is a LangChain `BaseChatModel` that calls `rag.chat`, so agents compose it in ordinary chains (`prompt | LocalQwen() | parser`) and share the one loaded model. Pass `json_schema=` to make llama.cpp constrain output to that JSON schema. Translate uses this with the `ServiceRequest` Pydantic model so a 3B model returns valid JSON.
+`LocalQwen` is a LangChain `BaseChatModel` that calls `rag.complete` and reports token usage and the model name on its LangSmith runs, so agents compose it in ordinary chains (`prompt | LocalQwen() | parser`) and share the one loaded model. Pass `json_schema=` to make llama.cpp constrain output to that JSON schema. Translate uses this with the `ServiceRequest` Pydantic model so a 3B model returns valid JSON.
 
 ### Work agents (graph nodes)
 
@@ -63,7 +66,11 @@ Each takes the current `JobState` and returns a partial update. Every update inc
 
 ### Helpers
 
-`ServiceRequest` (the Translate output schema and `CATEGORIES`), `rule_urgency` (the hazard-keyword urgency floor), `contact_of` / `contact_of_candidate` (phone, email and website pulled from a candidate), `quote_text` (a quote as display text, e.g. "$180.00 (parts included)"). The prompts are `TRANSLATE_PROMPT`, `QUOTE_PROMPT` and `CONFIRM_PROMPT`.
+`ServiceRequest` (the Translate output schema and `CATEGORIES`), `rule_urgency` (the hazard-keyword urgency floor), `contact_of` / `contact_of_candidate` (phone, email and website pulled from a candidate), `quote_text` (a quote as display text, e.g. "$180.00 (parts included)"), `quote_body(sr, description)` (the quote request body: a fixed first line with urgency, category, city and title, the model's description, and a fixed closing question). The prompts are `TRANSLATE_PROMPT`, `QUOTE_PROMPT` (the model writes only the one- or two-sentence description) and `CONFIRM_PROMPT` (a fill-in template).
+
+### Tracing
+
+`web_search`, `find_website` and `rank_candidates` are traced tool runs (`web_search` records cache hits), and their thread pools are `ContextThreadPoolExecutor`s so worker threads stay in the current trace. `rag.search` is a retriever run, `rag.upsert_profiles` and `media.save` are tool runs. All of this is a no-op unless LangSmith tracing is on.
 
 ## `media.py`
 
@@ -112,6 +119,8 @@ Job IDs are checked to be 32 hex characters before any path is built, and files 
 | `retry(job_id)` | Continues an `error` or `stalled` job from its last checkpoint |
 | `job_view(job_id, role)` | The job as the tenant (limited fields) or owner (everything) sees it. Both include `media` with URLs |
 | `list_jobs()` | The 100 most recent jobs with status, for the console |
+
+Background runs copy the caller's `contextvars`, so a LangSmith trace that starts or resumes a job contains its agent runs; each run is named `repair_workflow` with the job ID as metadata.
 
 Only one background run per job is allowed at a time. `_guard` makes the check-and-start atomic, so two clicks can't answer the same step twice.
 

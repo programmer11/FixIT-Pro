@@ -8,7 +8,7 @@ It's a small retrieval-augmented generation (RAG) app:
 - **Generation:** a local [Qwen 2.5 3B Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) model (GGUF, via `llama-cpp-python`) writes the recommendation, using only the retrieved profiles. No OpenAI key is needed.
 - **Web UI:** a FastAPI server with a landing page, search results as provider cards, and an admin page for uploading profiles.
 
-▶ Watch the [search demo](FixIT-Pro-demo.mp4) and the [repair workflow demo](FixIT-Pro-workflow-demo.mp4). Full documentation is in [docs/](docs/README.md), including the [workflow guide](docs/workflow.md) and [code reference](docs/code-reference.md).
+▶ Watch the [search demo](FixIT-Pro-demo.mp4), the [repair workflow demo](FixIT-Pro-workflow-demo.mp4) and the [evaluation demo](FixIT-Pro-evals-demo.mp4). Full documentation is in [docs/](docs/README.md), including the [workflow guide](docs/workflow.md) and [code reference](docs/code-reference.md).
 
 ## Requirements
 
@@ -116,7 +116,11 @@ You can also upload profiles from the notebook: put the JSON file next to `home_
 | `media.py` | Tenant photo and video uploads: validation and storage |
 | `static/` | Landing page, admin page, styles and browser script |
 | `home_repair_rag.ipynb` | The original notebook version of the pipeline |
-| `docs/` | Architecture, workflow, code reference, setup, user and admin guides, data format, API reference, troubleshooting |
+| `evals/` | Test cases and golden dataset run as LangSmith traces and experiments, trace verification, failure analysis |
+| `FixIT-Pro_test_cases.xlsx` | 50 labeled test cases with their latest results |
+| `FixIT-Pro_golden_dataset.xlsx` | 118 reference examples with correct outputs |
+| `FixIT-Pro_golden_eval.xlsx` | Latest golden evaluation: scores, failure modes, cost model |
+| `docs/` | Architecture, workflow, code reference, setup, user and admin guides, data format, API reference, troubleshooting, evals and the evaluation report |
 
 ## API
 
@@ -134,6 +138,15 @@ You can also upload profiles from the notebook: put the JSON file next to `home_
 | `GET` | `/api/admin/jobs/{id}` | header `X-Admin-Token` | Full job state for the owner |
 | `POST` | `/api/admin/jobs/{id}/resume` | `{"step": "...", "value": {...}}`, header `X-Admin-Token` | Updated job (owner steps) |
 | `POST` | `/api/admin/jobs/{id}/retry` | header `X-Admin-Token` | Re-runs a failed or interrupted step |
+
+## Evals
+
+The app is evaluated with LangSmith: 50 test cases (happy paths, edge cases, known failures), each traced with its LLM and tool calls, and a golden dataset of 118 reference examples run as experiments with failure analysis. See [Evaluations and tracing](docs/evals.md) and the latest [evaluation report](docs/eval-report.md).
+
+```bash
+python3 -m evals.run_evals --project <your-langsmith-project>
+python3 -m evals.golden --compare evals/results/golden-<earlier run>
+```
 
 ## Notes
 

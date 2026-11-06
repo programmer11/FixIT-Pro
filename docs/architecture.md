@@ -37,6 +37,7 @@ flowchart LR
 | Orchestrator | `orchestrator.py` | LangGraph graph, human approval gates, saved job state, background runs |
 | Tenant page | `static/request.html` | Submit a request, follow progress, give time slots |
 | Owner console | `static/jobs.html`, `static/jobs.js` | Review requests and complete owner steps |
+| Evals | `evals/` | Test cases and golden dataset run as LangSmith traces and experiments; see [Evaluations and tracing](evals.md) |
 
 ## How a search works
 
@@ -61,17 +62,21 @@ sequenceDiagram
 1. The location, if given, is appended to the question (`"<question> in <location>"`).
 2. Pinecone embeds the query with the index's integrated model and returns the 3 closest profiles from the `santa-clara-technician-profiles` namespace.
 3. The browser shows provider cards right away.
-4. A second request asks Qwen for a recommendation. The model sees only the 3 retrieved profiles and a system prompt that tells it to use labeled fields, write "Not published" for missing values, keep caveats such as license conflicts, and never invent contact details, prices or licensing.
+4. A second request asks Qwen for a recommendation. The model sees only the 3 retrieved profiles and a system prompt that tells it to recommend only profiles whose services list the job (or say nobody fits), start each one with its exact name, use labeled fields, write "Not published" for missing values, copy caveats such as license conflicts, unavailability and service area, call a provider licensed only when its profile has a license number, and never invent contact details, prices or licensing.
 
 ## Design decisions
 
 - **Two requests instead of one.** Search takes about a second; a CPU-only answer can take a minute. Splitting them lets the cards appear immediately. The answer endpoint repeats the search rather than trusting profile text sent from the browser.
-- **One model call at a time.** llama.cpp models aren't safe to call from several threads, so `rag.chat` holds a lock. Search answers and workflow agents share the one loaded model and wait in line.
+- **One model call at a time.** llama.cpp models aren't safe to call from several threads, so `rag.complete` holds a lock. Search answers and workflow agents share the one loaded model and wait in line.
 - **Workflow runs in the background.** Agent steps can take a minute on CPU, so job endpoints return at once and run the graph on a thread. Pages poll for progress.
 - **People are part of the graph.** Approvals are LangGraph interrupts, so a job can wait days for the owner and survive server restarts, because its state is checkpointed in SQLite.
 - **Lazy model loading.** Qwen loads on the first answer request, not at startup, so the server starts quickly and search works even if the model file is missing.
 - **Stable document IDs.** Each profile is stored as `technician-<ID>`, so re-uploading updates existing documents instead of duplicating them.
 - **Profile text as data.** Profiles are passed to the model as data, and the browser escapes all profile text before display. Links are only rendered for `http(s)` URLs.
+
+## Tracing
+
+Every model call, Pinecone search and upload, internet search, website lookup, ranking and file upload is a LangSmith run when tracing is on. LLM runs record the prompt, output, model and token counts. The workflow's background thread copies the caller's context, so a trace that starts a job also contains its agent runs. Tracing is off unless `LANGSMITH_TRACING=true`; the evals turn it on for themselves. See [Evaluations and tracing](evals.md).
 
 ## Data in Pinecone
 

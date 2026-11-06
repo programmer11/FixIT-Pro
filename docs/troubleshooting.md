@@ -48,6 +48,20 @@ The message names the problem and the item number (counting from 1). Common caus
 
 Uploads add and update profiles but never delete them. Delete the document `technician-<ID>` in the Pinecone console. See [Removing a technician](admin-guide.md#removing-a-technician).
 
+## Evals and tracing
+
+### "LANGSMITH_API_KEY isn't set" or "401 Invalid token"
+
+Add `LANGSMITH_API_KEY` to `.env` in the project folder; the evals read it from there. Check that it's a current key for the workspace you expect. To try the evals without a key, run `python3 -m evals.run_evals --offline`.
+
+### Traces don't appear in LangSmith
+
+Traces are uploaded in the background and can take a minute to show. Check the project name (`--project`, else `LANGSMITH_PROJECT`, else `fixit-pro-evals`). `verify_traces` waits for ingestion and lists any trace it couldn't read.
+
+### Golden results changed although the code didn't
+
+The golden run loads profiles `001`–`036` from `santa_clara_home_repair_profiles.json`. If their text changed (for example after replacing the file), search results and recommendations change too. Compare runs with `python3 -m evals.golden --compare`.
+
 ## Repair request workflow
 
 ### A request stays on "working" for a long time
