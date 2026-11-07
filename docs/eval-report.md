@@ -110,7 +110,7 @@ The 5 extra error runs are DuckDuckGo "No results found" responses, which the ap
 
 In order of expected value:
 
-1. **Clean the profile data.** Replace each `HYPERLINK is not implemented. linkLocation=…` value with its URL, and drop the Google Maps search links, which the app treats as websites. This should recover the four retrieval regressions. Re-run with `--compare`.
+1. ~~**Clean the profile data.**~~ Done, but it didn't recover retrieval. See [Follow-up: profile data cleanup](#follow-up-profile-data-cleanup). The next step is to **keep link fields out of the embedded text**: index `Website`, `Profile / primary source` and `Additional source` as metadata only.
 2. **Fix urgency in code, not the prompt.** Extend the keyword floor with word boundaries and the missed patterns ("lock is broken", "no power", "stopped cooling", temperatures below 50°F), and handle negation ("no gas smell"). This targets the costliest mode (TR-URG-UNDER, about $2,020 a month) and TR-URG-FLOOR, and it fixes known failures KF-03 and KF-04.
 3. **Classify category separately.** Use a small classifier or keyword pass with word boundaries to pick the category, and let the model fill the other fields. Alternatively, reorder or shorten the category list to test whether the 3B model has a position bias. Targets TR-CAT (11 examples) and KF-02, KF-05 and KF-06.
 4. **Improve retrieval text.** Embed a short summary per profile (name, services, service area) instead of every field, or put "Services provided" first. Measure with the Retrieval sheet: hit@3 and nDCG@3. This is the root cause behind RET-MISS, RET-INTRUDER and most REC-OFFLIST failures.
@@ -127,8 +127,26 @@ In order of expected value:
 | `golden-ad8ee4d4` | Quote: code-fixed lines and model-written description | Messages 12% → 88% | Yes |
 | `golden-be70aee0` | Final configuration, all sheets | 61% → 63% overall | — |
 
+## Follow-up: profile data cleanup
+
+After the round above, the profiles file was cleaned. Each of the 49 `HYPERLINK is not implemented…` values became its plain URL, and the Google Maps search links in profiles 037–055 were removed, so they no longer show as Website buttons. The cleaned file was re-indexed into the app's namespace. Experiment `golden-8d5dec22` (results in `evals/results/golden-20261106-190336/`) compares it with `golden-be70aee0`:
+
+| Measure | Before cleanup | After cleanup | Change |
+| --- | --- | --- | --- |
+| Golden pass rate | 63% (74/117) | 62% (72/117) | −2 examples |
+| Retrieval pass rate | 59% | 55% | −1 example (R02 fixed; R08, R22 regressed) |
+| Retrieval hit@3 / nDCG@3 | 0.724 / 0.367 | 0.759 / 0.357 | +0.035 / −0.010 |
+| Off-topic specialist in top 3 (RET-INTRUDER) | 5 | 9 | +4 |
+| Recommendation pass rate / provider precision | 17% / 0.364 | 8% / 0.273 | A02 regressed |
+| Translate, Ranking, Messages | 55% / 93% / 88% | unchanged | 0 |
+| Estimated cost of failures | $4,690/month | $5,049/month | +$359 |
+
+**Why it didn't help:** the original 36 profiles had the placeholder text `Open website` and `Open source / profile` in their link fields, not URLs. The export text and the cleaned URLs are both long strings full of keywords: Angi URLs, for example, contain words like `unlicensed-contractor-reviews`. Removing the export text took about 100 characters off each profile, but the URLs that remain still differ from what the golden labels were made against. The noise is the URLs themselves.
+
+**Kept anyway:** the app now shows working Website and profile links instead of export text or map searches. The retrieval fix belongs in code: embed only descriptive fields (name, services, service area, notes) and keep links in metadata (next step 1 above).
+
 ## Files
 
-- Golden results: `evals/results/golden-20261106-135812/` (`compare.md`, `analysis.json`, `golden_eval.xlsx`), and `FixIT-Pro_golden_eval.xlsx`.
+- Golden results: `evals/results/golden-20261106-135812/` (`compare.md`, `analysis.json`, `golden_eval.xlsx`). `FixIT-Pro_golden_eval.xlsx` holds the latest full run, the follow-up `golden-8d5dec22`.
 - Test-case results: `evals/results/20261106-142107-63f333/` (`results.json`, `verification.md`), and `FixIT-Pro_test_cases.xlsx`.
 - Run outputs in `evals/results/` are git-ignored; the experiments and traces are kept in LangSmith.
