@@ -2,6 +2,8 @@
 
     python3 -m evals.golden --project-link fixit-local          # all 118 examples (~30 min, mostly local Qwen)
     python3 -m evals.golden --sheets Retrieval,Ranking           # fast subset
+    python3 -m evals.golden --compare evals/results/golden-<before>   # run, then compare with an earlier run
+    python3 -m evals.golden --compare evals/results/golden-<a> evals/results/golden-<b>   # compare two saved runs
 
 1. Syncs the spreadsheet to the LangSmith dataset "fixit-pro-golden" (one example per row; split = sheet; metadata:
    golden_id, sheet, tag, related_test, confidence).
@@ -22,6 +24,35 @@ from . import harness
 GOLDEN = harness.ROOT / "FixIT-Pro_golden_dataset.xlsx"
 DATASET = "fixit-pro-golden"
 URGENCY = ["low", "normal", "high", "emergency"]
+# The golden labels (relevant technicians, recommendation sources, caveats) were made against profiles 001-036.
+# The evaluation searches exactly those, in a namespace of its own, so profiles added to the app's file later
+# can't turn a correct retrieval into a "wrong" one. Relabel and bump GOLDEN_NAMESPACE to widen it.
+PROFILE_IDS = [f"{i:03d}" for i in range(1, 37)]
+GOLDEN_NAMESPACE = "fixit-pro-golden-v1"
+
+
+def golden_profiles():
+    """The profiles the golden labels refer to, from the app's profiles file; fails if any are missing."""
+    path = harness.ROOT / "santa_clara_home_repair_profiles.json"
+    if not path.exists():
+        sys.exit(f"{path.name} is needed: the golden evaluation loads profiles {PROFILE_IDS[0]}-{PROFILE_IDS[-1]} from it.")
+    by_id = {str(p["ID"]): p for p in json.loads(path.read_text())}
+    missing = [i for i in PROFILE_IDS if i not in by_id]
+    if missing:
+        sys.exit(f"Profiles {missing} are missing from {path.name}; the golden labels refer to them.")
+    return [by_id[i] for i in PROFILE_IDS]
+
+
+def ensure_namespace(rag, profiles):
+    """Upsert the golden profiles into GOLDEN_NAMESPACE (idempotent) and wait until they're searchable."""
+    rag.namespace = GOLDEN_NAMESPACE
+    rag.upsert_profiles(profiles)
+    probe = profiles[0]
+    for _ in range(30):
+        if any(m["id"] == f"technician-{probe['ID']}" for m in rag.search(probe["Name / company"], top_k=5)):
+            return
+        time.sleep(2)
+    sys.exit(f"Profiles didn't become searchable in Pinecone namespace {GOLDEN_NAMESPACE}.")
 
 
 # ======================================================================= loading the spreadsheet
@@ -102,7 +133,7 @@ class Runner:
     def __init__(self):
         import agents, media, rag
         self.agents, self.media, self.rag = agents, media, rag
-        self.profiles = {p["ID"]: p for p in json.loads((harness.ROOT / "santa_clara_home_repair_profiles.json").read_text())}
+        self.profiles = {p["ID"]: p for p in golden_profiles()}
 
     def __call__(self, inputs):
         from langsmith.run_helpers import get_current_run_tree
@@ -442,7 +473,7 @@ def rescore(folder):
     payload = json.loads((folder / "golden_results.json").read_text())
     golden = {e["id"]: e for e in load_golden()}
     ds, sync = sync_dataset(client, list(golden.values()))
-    P = {p["ID"]: p for p in json.loads((harness.ROOT / "santa_clara_home_repair_profiles.json").read_text())}
+    P = {p["ID"]: p for p in golden_profiles()}
     old = list(client.list_feedback(run_ids=[e["run_id"] for e in payload["examples"]]))
     for f in {f.id: f for f in old}.values():
         if f.key in FEEDBACK_KEYS:
@@ -470,11 +501,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rescore", metavar="RESULTS_DIR", help="re-score saved outputs and replace the experiment's feedback")
     ap.add_argument("--sheets", help="comma-separated sheets (default: all)")
+    ap.add_argument("--compare", nargs="+", metavar="RESULTS_DIR",
+                    help="BASE: run, then compare with BASE; BASE NEW: only compare two saved runs")
     ap.add_argument("--project-link", default="fixit-local", help="LangSmith project of the test-case run to link")
     args = ap.parse_args(argv)
     if args.rescore:
         harness.configure(Path(args.rescore) / "work")
         print(rescore(args.rescore))
+        return
+    if args.compare and len(args.compare) == 2:
+        print(compare(*args.compare))
         return
 
     run_id = "golden-" + datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -482,7 +518,6 @@ def main(argv=None):
     harness.configure(out_dir / "work")
     import rag  # noqa: E402  (.env: LANGSMITH_API_KEY, Pinecone)
     from langsmith import Client
-    rag.namespace = harness.EVAL_NAMESPACE
     if not os.getenv("LANGSMITH_API_KEY"):
         sys.exit("LANGSMITH_API_KEY isn't set in FixIT-Pro/.env.")
     client = Client()
@@ -492,7 +527,10 @@ def main(argv=None):
     ds, sync = sync_dataset(client, examples)
     print(f"Dataset {DATASET}: {len(examples)} examples ({sync})")
     by_id = {e["id"]: e for e in examples}
-    P = {p["ID"]: p for p in json.loads((harness.ROOT / "santa_clara_home_repair_profiles.json").read_text())}
+    profiles = golden_profiles()
+    ensure_namespace(rag, profiles)
+    print(f"Pinecone namespace {GOLDEN_NAMESPACE}: profiles {PROFILE_IDS[0]}-{PROFILE_IDS[-1]}")
+    P = {p["ID"]: p for p in profiles}
     scored = {}
 
     def evaluator(run, example):
@@ -510,7 +548,8 @@ def main(argv=None):
     data = [e for e in client.list_examples(dataset_id=ds.id)
             if not sheets or (e.metadata or {}).get("sheet") in sheets]
     data.sort(key=lambda e: e.metadata["golden_id"])
-    meta = {"eval_run_id": run_id, "model": rag.model_name(), "pinecone_namespace": rag.namespace, "dataset_rows": len(data)}
+    meta = {"eval_run_id": run_id, "model": rag.model_name(), "pinecone_namespace": rag.namespace, "dataset_rows": len(data),
+            "profile_ids": f"{PROFILE_IDS[0]}-{PROFILE_IDS[-1]}", "sheets": ",".join(sorted(sheets)) if sheets else "all"}
     try:
         import subprocess
         meta["git_sha"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=harness.ROOT, capture_output=True, text=True).stdout.strip()
@@ -540,6 +579,53 @@ def main(argv=None):
     print(f"Results: {out_dir / 'golden_results.json'}")
     from .golden_report import build
     print(build(out_dir))
+    if args.compare:
+        print(compare(args.compare[0], out_dir))
+
+
+def compare(base_dir, new_dir):
+    """What changed between two golden runs, on the examples both ran: pass rate and metric means per sheet,
+    examples that flipped (fixed / regressed), and failure-mode counts. Writes compare.md and compare.json in NEW."""
+    load = lambda d: json.loads((Path(d) / "golden_results.json").read_text())
+    base, new = load(base_dir), load(new_dir)
+    b = {e["id"]: e for e in base["examples"]}
+    n = {e["id"]: e for e in new["examples"]}
+    common = sorted(set(b) & set(n))
+    scored = lambda e: not (e["sheet"] == "Retrieval" and e["metrics"].get("applicable") == 0)
+    rows, lines = [], []
+    sheets = sorted({n[i]["sheet"] for i in common}, key=["Retrieval", "Translate", "Ranking", "Recommendation", "Messages"].index)
+    for sh in sheets + ["All"]:
+        ids = [i for i in common if (sh == "All" or n[i]["sheet"] == sh) and scored(n[i])]
+        if not ids:
+            continue
+        rate = lambda D: sum(D[i]["passed"] for i in ids) / len(ids)
+        metrics = sorted({k for i in ids for k, v in n[i]["metrics"].items() if isinstance(v, (int, float)) and k != "applicable"}) if sh != "All" else []
+        mean = lambda D, k: (lambda v: round(sum(v) / len(v), 3) if v else None)([D[i]["metrics"][k] for i in ids if isinstance(D[i]["metrics"].get(k), (int, float))])
+        rows.append({"sheet": sh, "examples": len(ids), "base_pass": round(rate(b), 3), "new_pass": round(rate(n), 3),
+                     "fixed": [i for i in ids if not b[i]["passed"] and n[i]["passed"]],
+                     "regressed": [i for i in ids if b[i]["passed"] and not n[i]["passed"]],
+                     "metrics": {k: (mean(b, k), mean(n, k)) for k in metrics}})
+    count = lambda D: __import__("collections").Counter(m for i in common for m in D[i]["modes"])
+    cb, cn = count(b), count(n)
+    modes = sorted(set(cb) | set(cn), key=lambda m: -(cb[m] + cn[m]))
+    lines += [f"# Golden comparison: {base['experiment']} → {new['experiment']}", "",
+              f"{len(common)} examples in both runs.", "",
+              "| Sheet | Examples | Pass before | Pass after | Δ | Fixed | Regressed |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    for r in rows:
+        lines.append(f"| {r['sheet']} | {r['examples']} | {r['base_pass']:.0%} | {r['new_pass']:.0%} | {r['new_pass'] - r['base_pass']:+.0%} | "
+                     f"{', '.join(r['fixed']) or '—'} | {', '.join(r['regressed']) or '—'} |")
+    lines += ["", "| Sheet | Metric | Before | After |", "| --- | --- | --- | --- |"]
+    for r in rows:
+        for k, (x, y) in r["metrics"].items():
+            if x != y:
+                lines.append(f"| {r['sheet']} | {k} | {x} | {y} |")
+    lines += ["", "| Failure mode | Before | After | Δ |", "| --- | --- | --- | --- |"]
+    lines += [f"| {m} | {cb[m]} | {cn[m]} | {cn[m] - cb[m]:+d} |" for m in modes]
+    text = "\n".join(lines) + "\n"
+    (Path(new_dir) / "compare.md").write_text(text)
+    (Path(new_dir) / "compare.json").write_text(json.dumps({"base": base["experiment"], "new": new["experiment"], "sheets": rows,
+                                                            "modes": {m: [cb[m], cn[m]] for m in modes}}, indent=1))
+    return text
 
 
 if __name__ == "__main__":

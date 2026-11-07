@@ -241,15 +241,18 @@ def build(folder):
                 "dominant_family": fam[0]["family"] if fam else None, "total_monthly_cost": round(total_cost, 2),
                 "test_run": tests and tests["eval_run_id"]}
     (folder / "analysis.json").write_text(json.dumps(analysis, indent=1, default=str))
-    write_workbook(g, ex, agg, clusters, fam, analysis, trace_url, test_by_id, test_url)
+    # Every run gets its own workbook; only a run of every sheet replaces the project's main report.
+    full = g["metadata"].get("sheets", "all") == "all"
+    paths = [folder / "golden_eval.xlsx"] + ([REPORT] if full else [])
+    write_workbook(g, ex, agg, clusters, fam, analysis, trace_url, test_by_id, test_url, paths)
     a = analysis
-    return (f"Report: {REPORT.name} · pass {agg[-1]['passed']}/{agg[-1]['n']} · dominant by count {a['dominant_by_count']}, "
+    return (f"Report: {', '.join(p.name for p in paths)} · pass {agg[-1]['passed']}/{agg[-1]['n']} · dominant by count {a['dominant_by_count']}, "
             f"by cost {a['dominant_by_cost']} · est. ${a['total_monthly_cost']:,.0f}/month")
 
 
 # ======================================================================= workbook
 
-def write_workbook(g, ex, agg, clusters, fam, analysis, trace_url, test_by_id, test_url):
+def write_workbook(g, ex, agg, clusters, fam, analysis, trace_url, test_by_id, test_url, paths):
     from openpyxl import Workbook
     from openpyxl.formatting.rule import FormulaRule
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -404,7 +407,8 @@ def write_workbook(g, ex, agg, clusters, fam, analysis, trace_url, test_by_id, t
     exs.auto_filter.ref = exs.dimensions
     exs.conditional_formatting.add(f"D2:D{exs.max_row}", FormulaRule(formula=['$D2="fail"'], fill=PatternFill("solid", fgColor="FDE2E1")))
     exs.conditional_formatting.add(f"D2:D{exs.max_row}", FormulaRule(formula=['$D2="pass"'], fill=PatternFill("solid", fgColor="DCF5E3")))
-    wb.save(REPORT)
+    for path in paths:
+        wb.save(path)
 
 
 def applicable_static(e):

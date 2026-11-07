@@ -9,3 +9,5 @@ workflow.db*
 uploads/
 # Eval run outputs (traces, results, temporary workflow DB and uploads)
 evals/results/
+# Copies of the profiles file (contact details)
+santa_clara_home_repair_profiles_expanded_86.json
