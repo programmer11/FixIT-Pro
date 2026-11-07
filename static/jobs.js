@@ -23,7 +23,7 @@ async function loadJobs() {
         : j.status === "confirmed" ? "Confirmed" : j.status === "working" ? `${j.agent} agent working` : `${j.agent}: ${j.status}`;
       return `<button class="jobitem${j.id === current ? " sel" : ""}" data-id="${esc(j.id)}">
         <strong>${esc(j.title || j.request_text)}</strong>
-        <span class="meta"><span class="dot ${esc(dot)}"></span>${esc(label)} · ${esc(j.created_at.replace("T", " "))}</span></button>`;
+        <span class="meta"><span class="dot ${esc(dot)}"></span>${esc(label)} · ${esc(j.created_at.replace("T", " "))}${j.media_count ? ` · 📎 ${esc(j.media_count)}` : ""}</span></button>`;
     }).join("") : `<p class="meta">No requests yet. Tenants submit them at <a href="/request">/request</a>.</p>`;
     document.querySelectorAll(".jobitem").forEach((b) => b.addEventListener("click", () => openJob(b.dataset.id)));
   } catch (e) {
@@ -97,6 +97,7 @@ const STEP_VIEWS = {
     const subject = `Quote request: ${j.service_request.title}`;
     return `<h2>Get pricing quotes</h2>
       <p>Send each technician the drafted quote request, then enter the prices they quote. Leave a price blank if they didn't reply.</p>
+      ${j.media?.length ? `<p>Attach the tenant's photos and videos when you email (download them below):</p>${gallery(j.media)}` : ""}
       ${j.quote_requests.map((r) => `<div class="tech"><div class="tech-head"><strong>${esc(r.name)}</strong></div>
         <div class="msg">${esc(r.message)}</div>${contactLinks(r, subject, r.message)}
         <div class="quote-row"><input type="number" min="0" step="0.01" placeholder="Quote ($)" class="amt" data-id="${esc(r.tech_id)}">
@@ -136,13 +137,14 @@ function render(j) {
   if (j.status === "error" || j.status === "stalled") action = `<div class="box"><button class="btn primary" id="retry">Retry from last step</button><div id="act-status"></div></div>`;
   if (j.status === "confirmed") action = `<div class="box"><h2>Ready to send</h2><p>Send this to ${esc(j.selected.name)} to schedule the visit.</p>
     <div class="msg">${esc(j.confirmation_message)}</div>${contactLinks(j.selected, `Repair visit: ${j.service_request.title}`, j.confirmation_message)}</div>`;
-  $("detail").innerHTML = `${stepper(j)}${statusLine(j)}${action}
+  keepGalleries($("detail"), () => $("detail").innerHTML = `${stepper(j)}${statusLine(j)}${action}
     <div class="box"><h2>Service request</h2>${serviceRequest(j.service_request)}
       <p class="meta" style="margin-top:12px">Tenant wrote: “${esc(j.request_text)}”${j.tenant_name ? ` — ${esc(j.tenant_name)}` : ""}
         · <a href="/request?job=${esc(j.id)}" target="_blank" rel="noopener">Tenant's page ↗</a></p>
+      ${j.media?.length ? `<h3>Photos and videos from the tenant</h3>${gallery(j.media)}` : ""}
       ${j.timeslots ? `<h3>Tenant time slots</h3><ul>${j.timeslots.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}</div>
     <div class="box"><h2>Agent activity</h2><ul class="timeline">${(j.log || []).slice().reverse().map((e) =>
-      `<li><b>${esc(e.agent)}</b> · <span class="meta">${esc(e.at.replace("T", " "))}</span><br>${esc(e.text)}</li>`).join("")}</ul></div>`;
+      `<li><b>${esc(e.agent)}</b> · <span class="meta">${esc(e.at.replace("T", " "))}</span><br>${esc(e.text)}</li>`).join("")}</ul></div>`);
   bindActions();
   if (j.status === "working" || (j.status === "waiting" && j.pending?.role === "tenant"))
     detailTimer = setTimeout(() => current === j.id && openJob(j.id), j.status === "working" ? 2000 : 10000);

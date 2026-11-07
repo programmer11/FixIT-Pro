@@ -1,6 +1,6 @@
 # Profile data format
 
-A profiles file is a JSON array. Each element is one technician profile: an object whose keys are field names and whose values are strings.
+A profiles file is a JSON array. Each element is one technician profile: an object whose keys are field names and whose values are strings, numbers (such as `4.8` for a rating) or `null`.
 
 ## Rules
 
@@ -10,6 +10,9 @@ A profiles file is a JSON array. Each element is one technician profile: an obje
 - `ID` values must be unique within the file. The ID decides which Pinecone document is updated (`technician-<ID>`), so keep IDs stable between uploads.
 - Any other fields are optional. Empty strings and `null` values are left out of the index.
 - Every field, including ones not listed below, is indexed and can influence search.
+- Links must be plain URLs. A file exported from a spreadsheet can turn hyperlinks into text such as `HYPERLINK is not implemented. linkLocation=…`, which is indexed and shown as is; replace it with the URL.
+- Put a business's own website or its profile page in `Website` / `Additional source`. The app treats any link that isn't a review-site listing as the business's website, so a map or search-results link becomes its Website button.
+- The evaluation's golden dataset refers to profiles `001`–`036`: keep those IDs (see [Evaluations and tracing](evals.md)).
 
 ## Fields shown in the app
 

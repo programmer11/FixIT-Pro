@@ -109,25 +109,49 @@ These endpoints run the [repair request workflow](workflow.md). Creating or resu
 | `pending` | When waiting: `{"step", "role", "prompt"}`, where `role` is `owner` or `tenant` |
 | `error` | Error text when `status` is `error` |
 | `request_text`, `service_request`, `timeslots`, `confirmed_at` | Job details |
+| `media` | Uploaded photos and videos: `id`, `kind` (`image` or `video`), `mime`, `name`, `size` (bytes), `uploaded_at`, `url` |
 
 The tenant view adds `selected_name` and hides owner details: when the owner must act, `pending.prompt` just says "Waiting for the property owner." The owner view adds the full state: `shortlist`, `web_leads`, `quote_requests`, `quotes`, `selected`, `confirmation_message`, `log` and more. See the [state table](code-reference.md#state).
 
 ### `POST /api/jobs`
 
-Submits a tenant request and starts the workflow.
+Submits a tenant request, with optional photos and videos, and starts the workflow. The body is `multipart/form-data`:
 
 | Field | Type | Rules |
 | --- | --- | --- |
-| `request` | string | Required, 5–1000 characters |
-| `location` | string | Optional, up to 80 characters; defaults to Santa Clara |
-| `tenant_name` | string | Optional, up to 80 characters |
+| `request` | text | Required, 5–1000 characters |
+| `location` | text | Optional, up to 80 characters; defaults to Santa Clara |
+| `tenant_name` | text | Optional, up to 80 characters |
+| `files` | file, repeatable | Optional. See [photo and video rules](#photo-and-video-rules) |
 
 ```bash
-curl -X POST http://localhost:8000/api/jobs -H 'Content-Type: application/json' \
-  -d '{"request": "The kitchen faucet keeps dripping", "location": "Santa Clara"}'
+curl -X POST http://localhost:8000/api/jobs \
+  -F request='The kitchen faucet keeps dripping' -F location='Santa Clara' \
+  -F files=@faucet.jpg -F files=@leak.mov
 ```
 
 **Response `200`:** `{"id": "310e2993baad4ce5a1fd23ccdfc47990"}`
+
+Files are checked before the job starts. If any file is rejected, nothing is saved and no job is created.
+
+### `POST /api/jobs/{id}/media`
+
+Adds photos or videos to an existing request. Body: `multipart/form-data` with one or more `files`. Returns the updated tenant view. **Errors:** `400` the request is already confirmed or a file is rejected; `404` unknown job.
+
+### `GET /api/jobs/{id}/media/{media_id}`
+
+Returns one uploaded file, using the `url` from the job's `media` list. Served with its detected content type, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff`. Supports range requests, so videos can be scrubbed. **Errors:** `404`.
+
+### Photo and video rules
+
+| Rule | Limit |
+| --- | --- |
+| Formats | Photos: JPEG, PNG, GIF, WebP, HEIC, AVIF. Videos: MP4, MOV, WebM |
+| Size per file | Photos 15 MB, videos 100 MB |
+| Files per request | 8 in total, including ones added later |
+| Whole upload | 250 MB per request (`413` if larger) |
+
+The format is detected from the file's contents, not its name or declared type, so a renamed file of another kind is rejected with `400`. Limits are constants in `media.py`.
 
 ### `GET /api/jobs/{id}`
 
@@ -139,7 +163,7 @@ Answers the tenant's step. Body: `{"step": "scheduling", "value": {"timeslots": 
 
 ### `GET /api/admin/jobs`
 
-**Headers:** `X-Admin-Token`. Returns `{"jobs": [...]}`, the 100 most recent jobs, newest first. Each job has `id`, `created_at`, `request_text`, `title`, `urgency`, `status`, `step`, `agent` and `needs_owner`.
+**Headers:** `X-Admin-Token`. Returns `{"jobs": [...]}`, the 100 most recent jobs, newest first. Each job has `id`, `created_at`, `request_text`, `title`, `urgency`, `status`, `step`, `agent`, `media_count` and `needs_owner`.
 
 ### `GET /api/admin/jobs/{id}`
 

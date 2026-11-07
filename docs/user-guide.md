@@ -38,17 +38,23 @@ The recommendation can be wrong or incomplete, and the profile data may be out o
 Use this when you rent and want the property owner to arrange a repair.
 
 1. Open http://localhost:8000/request, or click **Request a repair** in the site header.
-2. Describe the problem in your own words, check the property location, and optionally add your name.
-3. Click **Submit request**.
+2. Describe the problem in your own words.
+3. Optionally, under **Photos or videos**, click **Choose Files** and pick pictures or short videos of the problem. You can choose several at once.
+4. Check the property location, and optionally add your name.
+5. Click **Submit request**.
+
+Photos and videos help the owner and technicians see the problem and quote accurately. You can add up to 8 files: photos (JPEG, PNG, HEIC from an iPhone, and other common formats) up to 15 MB each, and videos (MP4, MOV, WebM) up to 100 MB each. If a file is too large or isn't a photo or video, the page says which one and nothing is sent.
 
 The page now tracks your request. **Bookmark it**: its address (`/request?job=...`) is the only way back to your request. A progress bar shows the seven steps:
 
 | Step | What happens | You need to |
 | --- | --- | --- |
-| Translate | Your words become a service request, shown under **Service request** | Check it reads right |
+| Translate | Your words become a service request, shown under **Service request** | Check it reads right. Your photos and videos appear under **Photos and videos** |
 | Search & Match, Owner Approval, Pricing, Pricing Approval | Technicians are found and the owner approves one and its price | Wait. The page updates by itself |
 | Scheduling | **Pick times for the visit** appears | Enter 2 or 3 time slots, e.g. "Mon Nov 9, 9–11am", and click **Send time slots** |
 | Job Confirmation | The owner confirms the visit with the technician | Wait for the owner or technician to contact you |
+
+To send more photos or videos later, use **Add more** under **Photos and videos** on your request page, then click **Upload**. You can do this until the visit is confirmed.
 
 Urgent hazards such as sparks, a gas smell or flooding are always marked as emergencies. If you're in danger, call emergency services first.
 

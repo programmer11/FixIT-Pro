@@ -48,6 +48,20 @@ The message names the problem and the item number (counting from 1). Common caus
 
 Uploads add and update profiles but never delete them. Delete the document `technician-<ID>` in the Pinecone console. See [Removing a technician](admin-guide.md#removing-a-technician).
 
+## Evals and tracing
+
+### "LANGSMITH_API_KEY isn't set" or "401 Invalid token"
+
+Add `LANGSMITH_API_KEY` to `.env` in the project folder; the evals read it from there. Check that it's a current key for the workspace you expect. To try the evals without a key, run `python3 -m evals.run_evals --offline`.
+
+### Traces don't appear in LangSmith
+
+Traces are uploaded in the background and can take a minute to show. Check the project name (`--project`, else `LANGSMITH_PROJECT`, else `fixit-pro-evals`). `verify_traces` waits for ingestion and lists any trace it couldn't read.
+
+### Golden results changed although the code didn't
+
+The golden run loads profiles `001`–`036` from `santa_clara_home_repair_profiles.json`. If their text changed (for example after replacing the file), search results and recommendations change too. Compare runs with `python3 -m evals.golden --compare`.
+
 ## Repair request workflow
 
 ### A request stays on "working" for a long time
@@ -77,3 +91,16 @@ Pricing and Job Confirmation messages come from a small local model. Edit the fi
 ### The tenant lost their request link
 
 Open the request in the owner console, click **Tenant's page** under the service request, and send the tenant that page's address.
+
+### A photo or video won't upload
+
+The page names the file and the reason:
+
+- **"isn't a supported photo or video"**: the file isn't JPEG, PNG, GIF, WebP, HEIC, AVIF, MP4, MOV or WebM. This includes a file renamed to look like a photo. Convert it, or take a screenshot of it.
+- **"larger than 15 MB" / "larger than 100 MB"**: photos are limited to 15 MB and videos to 100 MB. Trim the video or send a shorter clip.
+- **"at most 8 photos and videos"**: the request already has 8 files.
+- **"already confirmed"**: files can't be added after the visit is confirmed. Send them to the owner directly.
+
+### A photo shows "no preview — download"
+
+It's a HEIC photo (the iPhone default). Most browsers other than Safari can't display HEIC. Download it and open it on your computer, or set the iPhone camera to **Most Compatible** (Settings → Camera → Formats) to take JPEGs.

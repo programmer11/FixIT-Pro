@@ -10,14 +10,14 @@ translate -> search_match -> owner_approval --rejected--> search_match (rejected
 
 Work agents live in agents.py. The *_gate nodes below only pause for a person (LangGraph interrupt) and route,
 so resuming never repeats an LLM call. Every step is checkpointed to SQLite, so jobs survive a server restart."""
-import operator, os, sqlite3, threading, uuid
+import contextvars, operator, os, sqlite3, threading, uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal, TypedDict
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
-import agents, rag
+import agents, media, rag
 from agents import log
 
 db_path = Path(os.getenv("WORKFLOW_DB") or rag.folder / "workflow.db")  # override for demos and tests
@@ -150,7 +150,7 @@ def _config(job_id):
 
 def _run(job_id, payload):
     try:
-        graph.invoke(payload, _config(job_id))
+        graph.invoke(payload, {**_config(job_id), "run_name": "repair_workflow", "metadata": {"job_id": job_id}})
     except Exception as e:
         _errors[job_id] = f"{type(e).__name__}: {e}"
     finally:
@@ -164,7 +164,8 @@ def _launch(job_id, payload):
         raise ValueError("This job is still being processed. Try again in a moment.")
     _active.add(job_id)
     _errors.pop(job_id, None)
-    threading.Thread(target=_run, args=(job_id, payload), daemon=True).start()
+    # Copy the caller's context so a LangSmith trace that started the job also contains its agent runs.
+    threading.Thread(target=contextvars.copy_context().run, args=(_run, job_id, payload), daemon=True).start()
 
 
 def _snapshot(job_id):
@@ -175,8 +176,8 @@ def _snapshot(job_id):
     return snap, pending
 
 
-def start_job(request_text, location, tenant_name=""):
-    job_id = uuid.uuid4().hex
+def start_job(request_text, location, tenant_name="", job_id=None):
+    job_id = job_id or uuid.uuid4().hex
     with _guard:
         _conn.execute("INSERT INTO jobs VALUES (?, ?, ?)", (job_id, datetime.now().isoformat(timespec="seconds"), request_text))
         _conn.commit()
@@ -258,7 +259,9 @@ def job_view(job_id, role):
     view = {"id": job_id, "status": status, "step": node, "agent_index": NODE_AGENT.get(node, len(AGENTS)),
             "agents": AGENTS, "pending": pending, "error": _errors.get(job_id),
             "request_text": v.get("request_text"), "service_request": v.get("service_request"),
-            "timeslots": v.get("timeslots"), "confirmed_at": v.get("confirmed_at")}
+            "timeslots": v.get("timeslots"), "confirmed_at": v.get("confirmed_at"),
+            "media": [{**{k: m[k] for k in ("id", "kind", "mime", "name", "size", "uploaded_at")},
+                       "url": f"/api/jobs/{job_id}/media/{m['id']}"} for m in media.list_media(job_id)]}
     if role == "tenant":
         view["selected_name"] = (v.get("selected") or {}).get("name")
         if pending and pending["role"] != "tenant":
@@ -282,5 +285,6 @@ def list_jobs():
         jobs.append({"id": job_id, "created_at": created, "request_text": text, "title": sr.get("title"),
                      "urgency": sr.get("urgency"), "status": view["status"], "step": view["step"],
                      "agent": AGENTS[view["agent_index"]] if view["agent_index"] < len(AGENTS) else "Done",
+                     "media_count": len(view["media"]),
                      "needs_owner": bool(view["pending"] and view["pending"]["role"] == "owner")})
     return jobs

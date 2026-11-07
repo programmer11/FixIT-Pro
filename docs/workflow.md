@@ -4,6 +4,14 @@ A tenant describes a problem in plain words. Seven agents turn it into a confirm
 
 The workflow is a [LangGraph](https://langchain-ai.github.io/langgraph/) state graph (`orchestrator.py`). The agents (`agents.py`) use LangChain prompts, output parsers and the DuckDuckGo search tool, and the shared local Qwen model.
 
+## Photos and videos
+
+The tenant can attach photos and videos when submitting, and add more later from their request page. `media.py` stores them per job, outside the workflow state, so the tenant can add files while the graph is waiting at a gate.
+
+The local Qwen model reads text only, so no agent looks at the images. They're for people: the owner sees them in the console, and the **Pricing** agent adds an exact line to each quote request, for example "The tenant has shared 2 photos and 1 video of the problem, which I've attached", so the owner remembers to attach them.
+
+Uploads are checked by content, not file name. Only common photo and video formats are accepted (no SVG or HTML), and files are served sandboxed with their detected type, so an uploaded file can never run as a page on the site.
+
 ## The seven agents
 
 | # | Agent | Does | Waits for |
@@ -11,10 +19,10 @@ The workflow is a [LangGraph](https://langchain-ai.github.io/langgraph/) state g
 | 1 | **Translate** | Turns the tenant's text into a structured service request: title, category, urgency, description and a search query | — |
 | 2 | **Search & Match** | Searches the Pinecone database and the internet, ranks technicians on the selection criteria and keeps the top 3, each with a website link | — |
 | 3 | **Owner Approval** | Shows the top 3 to the owner. Rejected technicians are excluded and the search runs again, until the owner approves | Owner |
-| 4 | **Pricing** | Drafts a quote request for each approved technician, then collects the quotes the owner enters | Owner |
+| 4 | **Pricing** | Drafts a quote request for each approved technician (fixed first and last lines; the model describes the problem), then collects the quotes the owner enters | Owner |
 | 5 | **Pricing Approval** | Shows the quotes; the owner picks the final technician, or rejects all and searches again | Owner |
 | 6 | **Scheduling** | Asks the tenant for 2–3 time slots | Tenant |
-| 7 | **Job Confirmation** | Drafts the message asking the technician to confirm a slot; the owner edits and approves it, or asks for changes | Owner |
+| 7 | **Job Confirmation** | Drafts the message asking the technician to confirm a slot from a fill-in template; the owner edits and approves it, or asks for changes | Owner |
 
 ## Flow
 
@@ -90,6 +98,7 @@ Results are cached for an hour. The search is retried because the free backend o
 
 - **Urgency floor.** Keywords such as "sparks", "gas smell", "flood" or "burst" make a request an emergency even if the model said otherwise. The model can raise urgency but never lower it below the rules.
 - **Model missing or bad output.** If the Qwen file can't be found or its JSON doesn't parse, Translate falls back to keyword rules, and Pricing and Job Confirmation fall back to message templates. The activity log records which was used.
+- **Fixed message lines.** A quote request always opens with "We have a <urgency>-urgency <category> job in <city>: <title>." and ends with the request for the total price, what it includes and the earliest availability; the model writes only the description in between. The confirmation message is a template the model fills in, ending "Thank you, / Property owner". This keeps the urgency word, city and questions exact, which the golden evaluation showed the model kept dropping (see [Evaluation report](eval-report.md)).
 - **Text is data.** Prompts tell the model to treat tenant text and profiles as data, not instructions. The browser escapes everything it displays, and links are only rendered for `http(s)` URLs.
 - **Nothing is sent automatically.** The app drafts messages and offers email, call and website links; the owner sends them and enters the quotes they get back.
 

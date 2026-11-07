@@ -5,3 +5,9 @@ __pycache__/
 santa_clara_home_repair_profiles.json
 *.bak.json
 workflow.db*
+# Tenant photos and videos
+uploads/
+# Eval run outputs (traces, results, temporary workflow DB and uploads)
+evals/results/
+# Copies of the profiles file (contact details)
+santa_clara_home_repair_profiles_expanded_86.json
